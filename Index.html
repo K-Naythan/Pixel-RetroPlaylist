@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -19,10 +18,30 @@
             <input type="file" id="importar-arquivo" accept="video/mp4" multiple style="display: none;">
         </div>
 
-        <ul id="lista-playlist">
-            </ul>
+        <ul id="lista-playlist"></ul>
     </div>
 
-    <script href="script.js"></script>
+    <div class="janela-windows" style="margin-top: 15px;">
+        <h2>Conectar Playlist</h2>
+        <div class="sala-controles">
+            <button id="btn-criar-sala" class="botao-retro">Criar Código</button>
+            <p>Seu Código: <strong id="codigo-gerado">-</strong></p>
+            <hr>
+            <input type="text" id="input-codigo-convite" placeholder="Colar código aqui...">
+            <button id="btn-entrar-sala" class="botao-retro">Entrar na Playlist</button>
+        </div>
+    </div>
+
+    <div class="janela-windows" style="margin-top: 15px;">
+        <h2>Chat da Playlist</h2>
+        <div id="caixa-chat">
+            </div>
+        <div class="chat-input-container">
+            <input type="text" id="input-mensagem" placeholder="Digite uma mensagem...">
+            <button id="btn-enviar-mensagem" class="botao-retro">Enviar</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
 </body>
-              </html>
+                </html>
