@@ -1,1 +1,57 @@
+body {
+    background-color: #008080; /* A cor clássica verde-azulada do Windows 95/98 */
+    font-family: monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
 
+.janela-windows {
+    background-color: #c0c0c0;
+    border: 2px solid #fff;
+    box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+    padding: 15px;
+    width: 90%;
+    max-width: 400px;
+}
+
+.botao-retro {
+    display: block;
+    background: #c0c0c0;
+    border: 2px solid;
+    border-color: #fff #808080 #808080 #fff;
+    padding: 5px 10px;
+    text-align: center;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+.botao-retro:active {
+    border-color: #808080 #fff #fff #808080;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+    background: white;
+    border: 2px solid #808080;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.item-musica {
+    padding: 8px;
+    border-bottom: 1px solid #e0e0e0;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-musica:hover {
+    background-color: #000080;
+    color: white;
+      }
