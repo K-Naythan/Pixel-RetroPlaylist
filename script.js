@@ -2,24 +2,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getDatabase, ref, set, push, onChildAdded, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
 const firebaseConfig = {
-    databaseURL: "https://playlist-retro-default-rtdb.firebaseio.com"
+    databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
 };
 
-let app, db;
-try {
-    app = initializeApp(firebaseConfig);
-    db = getDatabase(app);
-} catch (erro) { 
-    console.error("Erro Firebase, rodando em modo offline:", erro); 
-}
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-// ELEMENTOS DE LOGIN
 const telaLogin = document.getElementById('tela-login');
 const inputUsuario = document.getElementById('login-usuario');
 const inputSenha = document.getElementById('login-senha');
 const btnEntrarSistema = document.getElementById('btn-entrar-sistema');
 
-// ELEMENTOS DO APP
 const inputArquivo = document.getElementById('importar-arquivo');
 const player = document.getElementById('player-mp4');
 const listaPlaylist = document.getElementById('lista-playlist');
@@ -37,19 +30,12 @@ let salaAtual = null;
 let nomeUsuarioLogado = null; 
 const LIMITE_PESSOAS = 2;
 
-// 1. SISTEMA DE LOGIN E CADASTRO AUTOMÁTICO
 btnEntrarSistema.addEventListener('click', async () => {
     const usuario = inputUsuario.value.trim().toLowerCase();
     const senha = inputSenha.value.trim();
 
     if (!usuario || !senha) {
         alert("Insira o usuário e a palavra-passe!");
-        return;
-    }
-
-    if (!db) {
-        nomeUsuarioLogado = usuario.toUpperCase();
-        telaLogin.classList.add('escondido');
         return;
     }
 
@@ -70,16 +56,15 @@ btnEntrarSistema.addEventListener('click', async () => {
             await set(userRef, { senha: senha });
             nomeUsuarioLogado = usuario.toUpperCase();
             telaLogin.classList.add('escondido');
-            alert("Conta criada com sucesso!");
+            alert("Conta criada e registada no servidor com sucesso!");
             adicionarAvisoSistema("Nova conta ativa: " + nomeUsuarioLogado);
         }
     } catch (e) {
-        nomeUsuarioLogado = usuario.toUpperCase();
-        telaLogin.classList.add('escondido');
+        alert("Erro de conexão com o servidor. Verifica as tuas regras do Firebase.");
+        console.error(e);
     }
 });
 
-// 2. CRIAR SALA (PADRÃO EXCLUSIVO: SALA-####)
 btnCriarSala.addEventListener('click', async () => {
     if (!nomeUsuarioLogado) return;
     
@@ -89,84 +74,75 @@ btnCriarSala.addEventListener('click', async () => {
     salaAtual = idSala;
     codigoGeradoTxt.textContent = idSala;
     
-    adicionarAvisoSistema("Criando sala online " + idSala + "...");
+    adicionarAvisoSistema("A iniciar cache da sala " + idSala + " no servidor...");
 
-    if (db) {
-        try {
-            await set(ref(db, 'salas/' + idSala), { criador: nomeUsuarioLogado, quantidadePessoas: 1 });
-            conectarAoChatEPlaylist(idSala);
-        } catch (e) { 
-            adicionarAvisoSistema("Sala criada localmente (Offline)."); 
-        }
+    try {
+        await set(ref(db, 'salas/' + idSala), { criador: nomeUsuarioLogado, quantidadePessoas: 1 });
+        conectarAoChatEPlaylist(idSala);
+    } catch (e) { 
+        console.error(e);
     }
 });
 
-// 3. ENTRAR NA SALA (CORRIGE ENTRADAS SEM "SALA-")
 btnEntrarSala.addEventListener('click', async () => {
     if (!nomeUsuarioLogado) return;
     
     let entrada = inputCodigoConvite.value.trim().toUpperCase();
     if (!entrada) return;
 
-    // Se o usuário digitar apenas os números, o app monta o prefixo automaticamente
     if (!entrada.startsWith("SALA-")) {
         entrada = "SALA-" + entrada;
     }
 
-    salaAtual = entrada;
-    codigoGeradoTxt.textContent = entrada;
-
-    if (db) {
-        try {
-            const snapshot = await get(ref(db, 'salas/' + entrada));
-            if (snapshot.exists()) {
-                const dadosSala = snapshot.val();
-                if (dadosSala.quantidadePessoas >= LIMITE_PESSOAS) {
-                    alert("A playlist está cheia! Limite: " + LIMITE_PESSOAS + " pessoas.");
-                    return;
-                }
-                await set(ref(db, 'salas/' + entrada + '/quantidadePessoas'), (dadosSala.quantidadePessoas || 1) + 1);
+    try {
+        const snapshot = await get(ref(db, 'salas/' + entrada));
+        if (snapshot.exists()) {
+            const dadosSala = snapshot.val();
+            if (dadosSala.quantidadePessoas >= LIMITE_PESSOAS) {
+                alert("A playlist está cheia!");
+                return;
             }
-        } catch (e) { 
-            console.log("Modo local ou erro de rede."); 
+            
+            salaAtual = entrada;
+            codigoGeradoTxt.textContent = entrada;
+            
+            await set(ref(db, 'salas/' + entrada + '/quantidadePessoas'), (dadosSala.quantidadePessoas || 1) + 1);
+            conectarAoChatEPlaylist(entrada);
+            adicionarAvisoSistema("Conectado à sala: " + entrada);
+        } else {
+            alert("Esta sala não existe no servidor!");
         }
+    } catch (e) { 
+        alert("Erro ao procurar a sala.");
     }
-    conectarAoChatEPlaylist(entrada);
-    adicionarAvisoSistema("Conectado com sucesso à sala " + entrada);
 });
 
-// 4. ESCUTAS EM TEMPO REAL
 function conectarAoChatEPlaylist(idSala) {
-    if (!db) return;
-    try {
-        onChildAdded(ref(db, 'salas/' + idSala + '/chat'), (snapshot) => {
-            const dados = snapshot.val();
-            if (dados.tipo === "sistema") {
-                adicionarAvisoSistema(dados.texto);
-            } else {
-                adicionarMensagemNaTela(dados.usuario, dados.texto);
-            }
-        });
+    playlist = [];
+    listaPlaylist.innerHTML = '';
+    caixaChat.innerHTML = '';
 
-        onChildAdded(ref(db, 'salas/' + idSala + '/musicas'), (snapshot) => {
-            const musica = snapshot.val();
-            if (!playlist.some(m => m.nome === musica.nome)) {
-                playlist.push(musica);
-                atualizarInterfacePlaylist();
-            }
-        });
-    } catch (e) { 
-        console.error("Erro escutas:", e); 
-    }
+    onChildAdded(ref(db, 'salas/' + idSala + '/chat'), (snapshot) => {
+        const dados = snapshot.val();
+        if (dados.tipo === "sistema") {
+            adicionarAvisoSistema(dados.texto);
+        } else {
+            adicionarMensagemNaTela(dados.usuario, dados.texto);
+        }
+    });
+
+    onChildAdded(ref(db, 'salas/' + idSala + '/musicas'), (snapshot) => {
+        const musica = snapshot.val();
+        if (!playlist.some(m => m.nome === musica.nome)) {
+            playlist.push(musica);
+            atualizarInterfacePlaylist();
+        }
+    });
 }
 
-// 5. CARREGAR ARQUIVOS (MP3 E MP4)
 inputArquivo.addEventListener('change', function(evento) {
     const arquivos = evento.target.files;
-    if (!salaAtual) { 
-        alert("Crie ou entre em uma sala primeiro!"); 
-        return; 
-    }
+    if (!salaAtual) return alert("Entra numa sala primeiro!");
 
     for (let i = 0; i < arquivos.length; i++) {
         const arquivo = arquivos[i];
@@ -178,13 +154,11 @@ inputArquivo.addEventListener('change', function(evento) {
             atualizarInterfacePlaylist();
         }
 
-        if (db) {
-            push(ref(db, 'salas/' + salaAtual + '/musicas'), novaMusica);
-            push(ref(db, 'salas/' + salaAtual + '/chat'), {
-                tipo: "sistema",
-                texto: "[" + nomeUsuarioLogado + "] adicionou a faixa: " + arquivo.name
-            });
-        }
+        push(ref(db, 'salas/' + salaAtual + '/musicas'), novaMusica);
+        push(ref(db, 'salas/' + salaAtual + '/chat'), {
+            tipo: "sistema",
+            texto: "[" + nomeUsuarioLogado + "] adicionou a faixa: " + arquivo.name
+        });
     }
 });
 
@@ -207,7 +181,6 @@ function tocarMusica(index) {
     }
 }
 
-// 6. CHAT COLETIVO
 btnEnviarMensagem.addEventListener('click', enviarMensagemDoInput);
 inputMensagem.addEventListener('keypress', (e) => { if (e.key === 'Enter') enviarMensagemDoInput(); });
 
@@ -215,15 +188,11 @@ function enviarMensagemDoInput() {
     const texto = inputMensagem.value.trim();
     if (!texto || !salaAtual) return;
 
-    if (db) {
-        push(ref(db, 'salas/' + salaAtual + '/chat'), {
-            tipo: "usuario",
-            usuario: nomeUsuarioLogado,
-            texto: texto
-        });
-    } else {
-        adicionarMensagemNaTela(nomeUsuarioLogado + " (Offline)", texto);
-    }
+    push(ref(db, 'salas/' + salaAtual + '/chat'), {
+        tipo: "usuario",
+        usuario: nomeUsuarioLogado,
+        texto: texto
+    });
     inputMensagem.value = '';
 }
 
@@ -244,7 +213,5 @@ function adicionarAvisoSistema(texto) {
 }
 
 player.addEventListener('ended', () => {
-    if (musicaAtualIndex + 1 < playlist.length) { 
-        tocarMusica(musicaAtualIndex + 1); 
-    }
+    if (musicaAtualIndex + 1 < playlist.length) { tocarMusica(musicaAtualIndex + 1); }
 });
