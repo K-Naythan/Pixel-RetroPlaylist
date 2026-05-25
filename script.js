@@ -95,6 +95,11 @@ btnCriarSala.addEventListener('click', async () => {
             comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
         });
         conectarAoChatEPlaylist(idSala);
+        
+        push(ref(db, 'salas/' + idSala + '/chat'), {
+            tipo: "sistema",
+            texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " entrou na playlist e criou a sala."
+        });
     } catch (e) { 
         console.error(e);
     }
@@ -124,7 +129,11 @@ btnEntrarSala.addEventListener('click', async () => {
             
             await set(ref(db, 'salas/' + entrada + '/quantidadePessoas'), (dadosSala.quantidadePessoas || 1) + 1);
             conectarAoChatEPlaylist(entrada);
-            adicionarAvisoSistema("Conectado à sala: " + entrada);
+            
+            push(ref(db, 'salas/' + entrada + '/chat'), {
+                tipo: "sistema",
+                texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " entrou na playlist."
+            });
         } else {
             alert("Esta sala não existe no servidor!");
         }
@@ -263,4 +272,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-        }
+                                  }pp
