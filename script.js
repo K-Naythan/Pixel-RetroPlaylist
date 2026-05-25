@@ -1,15 +1,18 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, onChildAdded, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+import { getDatabase, ref, set, push, onChildAdded, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-// CONFIGURAÇÃO DO BANCO DE DADOS (Provisório para rodar)
 const firebaseConfig = {
     databaseURL: "https://playlist-retro-default-rtdb.firebaseio.com"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+let app, db;
+try {
+    app = initializeApp(firebaseConfig);
+    db = getDatabase(app);
+} catch (erro) {
+    console.error("Erro ao iniciar Firebase, rodando em modo offline:", erro);
+}
 
-// SELEÇÃO DE ELEMENTOS DA TELA
 const inputArquivo = document.getElementById('importar-arquivo');
 const player = document.getElementById('player-mp4');
 const listaPlaylist = document.getElementById('lista-playlist');
@@ -24,97 +27,122 @@ const btnEnviarMensagem = document.getElementById('btn-enviar-mensagem');
 let playlist = [];
 let musicaAtualIndex = 0;
 let salaAtual = null;
-const LIMITE_PESSOAS = 2; // Limite que você pediu
+const LIMITE_PESSOAS = 2;
 
-// 1. FUNÇÃO PARA CRIAR CÓDIGO DE CONVITE
-btnCriarSala.addEventListener('click', () => {
+// 1. CRIAR SALA (BLINDADO COM FALLBACK LOCAL)
+btnCriarSala.addEventListener('click', async () => {
     const idSala = "SALA-" + Math.floor(1000 + Math.random() * 9000);
     salaAtual = idSala;
     codigoGeradoTxt.textContent = idSala;
+    
+    adicionarAvisoSistema("Criando sala " + idSala + "...");
 
-    set(ref(db, 'salas/' + idSala), {
-        criador: true,
-        quantidadePessoas: 1
-    });
-
-    conectarAoChatEPlaylist(idSala);
-    adicionarAvisoSistema("Você criou a playlist " + idSala);
+    if (db) {
+        try {
+            await set(ref(db, 'salas/' + idSala), {
+                criador: true,
+                quantidadePessoas: 1
+            });
+            conectarAoChatEPlaylist(idSala);
+        } catch (e) {
+            adicionarAvisoSistema("Aviso: Sem conexão com o servidor. Rodando local.");
+        }
+    } else {
+        adicionarAvisoSistema("Modo offline ativo. Sala criada no dispositivo.");
+    }
 });
 
-// 2. FUNÇÃO PARA ENTRAR COM CÓDIGO DE CONVITE
+// 2. ENTRAR NA SALA (BLINDADO)
 btnEntrarSala.addEventListener('click', async () => {
     const idSala = inputCodigoConvite.value.trim().toUpperCase();
     if (!idSala) return;
 
-    const snapshot = await get(ref(db, 'salas/' + idSala));
-    
-    if (snapshot.exists()) {
-        const dadosSala = snapshot.val();
+    if (!db) {
+        alert("Sem conexão com o servidor para buscar salas online.");
+        return;
+    }
+
+    try {
+        const snapshot = await get(ref(db, 'salas/' + idSala));
         
-        // Verifica o limite de pessoas
-        if (dadosSala.quantidadePessoas >= LIMITE_PESSOAS) {
-            alert("A playlist está cheia! Limite de " + LIMITE_PESSOAS + " pessoas.");
-            return;
+        if (snapshot.exists()) {
+            const dadosSala = snapshot.val();
+            
+            if (dadosSala.quantidadePessoas >= LIMITE_PESSOAS) {
+                alert("A playlist está cheia! Limite de " + LIMITE_PESSOAS + " pessoas.");
+                return;
+            }
+
+            salaAtual = idSala;
+            codigoGeradoTxt.textContent = idSala;
+
+            await set(ref(db, 'salas/' + idSala + '/quantidadePessoas'), (dadosSala.quantidadePessoas || 1) + 1);
+            conectarAoChatEPlaylist(idSala);
+            adicionarAvisoSistema("Conectado com sucesso à sala online!");
+        } else {
+            alert("Código de playlist não encontrado.");
         }
-
-        salaAtual = idSala;
-        codigoGeradoTxt.textContent = idSala;
-
-        // Atualiza contador de pessoas na sala
-        set(ref(db, 'salas/' + idSala + '/quantidadePessoas'), dadosSala.quantidadePessoas + 1);
-
-        conectarAoChatEPlaylist(idSala);
-        adicionarAvisoSistema("Você entrou na playlist compartilhada!");
-    } else {
-        alert("Código de playlist inválido!");
+    } catch (e) {
+        alert("Erro ao tentar conectar. Verifique sua rede.");
     }
 });
 
-// 3. CONECTAR CHAT E PLAYLIST EM TEMPO REAL
+// 3. CONEXÃO EM TEMPO REAL (PROTEGIDA)
 function conectarAoChatEPlaylist(idSala) {
-    // Escuta novas mensagens do chat
-    onChildAdded(ref(db, 'salas/' + idSala + '/chat'), (snapshot) => {
-        const dados = snapshot.val();
-        if (dados.tipo === "sistema") {
-            adicionarAvisoSistema(dados.texto);
-        } else {
-            adicionarMensagemNaTela(dados.usuario, dados.texto);
-        }
-    });
+    if (!db) return;
 
-    // Escuta novas músicas adicionadas na playlist por qualquer um dos dois
-    onChildAdded(ref(db, 'salas/' + idSala + '/musicas'), (snapshot) => {
-        const musica = snapshot.val();
-        playlist.push(musica);
-        atualizarInterfacePlaylist();
-    });
+    try {
+        onChildAdded(ref(db, 'salas/' + idSala + '/chat'), (snapshot) => {
+            const dados = snapshot.val();
+            if (dados.tipo === "sistema") {
+                adicionarAvisoSistema(dados.texto);
+            } else {
+                adicionarMensagemNaTela(dados.usuario, dados.texto);
+            }
+        });
+
+        onChildAdded(ref(db, 'salas/' + idSala + '/musicas'), (snapshot) => {
+            const musica = snapshot.val();
+            // Evita duplicar músicas que já estão na lista local
+            if (!playlist.some(m => m.nome === musica.nome)) {
+                playlist.push(musica);
+                atualizarInterfacePlaylist();
+            }
+        });
+    } catch (e) {
+        console.error("Erro nas escutas em tempo real:", e);
+    }
 }
 
-// 4. LOGICA DE IMPORTAR E MANDAR PRO BANCO
+// 4. IMPORTAR MP4 (BLINDADO)
 inputArquivo.addEventListener('change', function(evento) {
     const arquivos = evento.target.files;
     if (!salaAtual) {
-        alert("Crie ou entre em uma playlist primeiro usando o código!");
+        alert("Crie ou entre em uma playlist primeiro!");
         return;
     }
 
     for (let i = 0; i < arquivos.length; i++) {
         const arquivo = arquivos[i];
         const urlBlob = URL.createObjectURL(arquivo);
+        const novaMusica = { nome: arquivo.name, url: urlBlob };
 
-        const novaMusica = {
-            nome: arquivo.name,
-            url: urlBlob
-        };
+        // Adiciona local imediatamente para não travar a experiência do usuário
+        if (!playlist.some(m => m.nome === novaMusica.nome)) {
+            playlist.push(novaMusica);
+            atualizarInterfacePlaylist();
+        }
 
-        // Salva no banco de dados para o outro celular ver
-        push(ref(db, 'salas/' + salaAtual + '/musicas'), novaMusica);
-
-        // Envia aviso automático no chat
-        push(ref(db, 'salas/' + salaAtual + '/chat'), {
-            tipo: "sistema",
-            texto: "A música '" + arquivo.name + "' foi adicionada à playlist!"
-        });
+        // Tenta sincronizar com o banco se ele estiver disponível
+        if (db) {
+            push(ref(db, 'salas/' + salaAtual + '/musicas'), novaMusica).catch(e => console.log("Erro ao sincronizar música."));
+            push(ref(db, 'salas/' + salaAtual + '/chat'), {
+                tipo: "sistema",
+                texto: "A música '" + arquivo.name + "' foi adicionada!"
+            }).catch(e => console.log("Erro ao enviar aviso."));
+        } else {
+            adicionarAvisoSistema("A música '" + arquivo.name + "' foi adicionada localmente.");
+        }
     }
 });
 
@@ -130,12 +158,14 @@ function atualizarInterfacePlaylist() {
 }
 
 function tocarMusica(index) {
-    musicaAtualIndex = index;
-    player.src = playlist[index].url;
-    player.play();
+    if (index >= 0 && index < playlist.length) {
+        musicaAtualIndex = index;
+        player.src = playlist[index].url;
+        player.play().catch(e => console.log("Erro ao dar play automático (necessita interação do usuário)."));
+    }
 }
 
-// 5. ENVIAR MENSAGEM NO CHAT
+// 5. CHAT (BLINDADO)
 btnEnviarMensagem.addEventListener('click', enviarMensagemDoInput);
 inputMensagem.addEventListener('keypress', (e) => { if (e.key === 'Enter') enviarMensagemDoInput(); });
 
@@ -143,11 +173,17 @@ function enviarMensagemDoInput() {
     const texto = inputMensagem.value.trim();
     if (!texto || !salaAtual) return;
 
-    push(ref(db, 'salas/' + salaAtual + '/chat'), {
-        tipo: "usuario",
-        usuario: "Usuário",
-        texto: texto
-    });
+    if (db) {
+        push(ref(db, 'salas/' + salaAtual + '/chat'), {
+            tipo: "usuario",
+            usuario: "Usuário",
+            texto: texto
+        }).catch(e => {
+            adicionarMensagemNaTela("Você (Local)", texto);
+        });
+    } else {
+        adicionarMensagemNaTela("Você (Offline)", texto);
+    }
 
     inputMensagem.value = '';
 }
