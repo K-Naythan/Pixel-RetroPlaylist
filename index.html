@@ -5,8 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Retro Playlist</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Bloqueio de ecrã para o Login */
+        .modal-login {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .modal-login.escondido {
+            display: none !important;
+        }
+        .login-box {
+            width: 90%;
+            max-width: 320px;
+            padding: 20px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+        }
+        .login-box input {
+            width: 100%;
+            margin-bottom: 12px;
+            padding: 8px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        .login-box button {
+            width: 100%;
+            padding: 8px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
+
+    <div id="tela-login" class="modal-login">
+        <div class="janela-windows login-box">
+            <h2>Acesso ao Sistema</h2>
+            <p style="margin-bottom: 12px; font-size: 12px;">Entre com sua conta ou crie uma nova:</p>
+            <input type="text" id="login-usuario" placeholder="Nome de usuário...">
+            <input type="password" id="login-senha" placeholder="Palavra-passe...">
+            <button id="btn-entrar-sistema" class="botao-retro">Entrar / Cadastrar</button>
+        </div>
+    </div>
 
     <div class="janela-windows">
         <h2>Minha Playlist Retro</h2>
@@ -27,7 +73,7 @@
             <button id="btn-criar-sala" class="botao-retro">Criar Código</button>
             <p>Seu Código: <strong id="codigo-gerado">-</strong></p>
             <hr>
-            <input type="text" id="input-codigo-convite" placeholder="Colar código aqui...">
+            <input type="text" id="input-codigo-convite" placeholder="Ex: SALA-1234 ou 1234">
             <button id="btn-entrar-sala" class="botao-retro">Entrar na Playlist</button>
         </div>
     </div>
