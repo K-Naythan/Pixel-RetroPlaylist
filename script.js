@@ -28,11 +28,33 @@ const painelBiblioteca = document.getElementById('painel-biblioteca');
 const btnAbrirBiblioteca = document.getElementById('btn-abrir-biblioteca');
 const btnFecharBiblioteca = document.getElementById('btn-fechar-biblioteca');
 
+const painelHistorico = document.getElementById('painel-historico');
+const btnAbrirHistorico = document.getElementById('btn-abrir-historico');
+const btnFecharHistorico = document.getElementById('btn-fechar-historico');
+const listaSalasHistorico = document.getElementById('lista-salas-historico');
+
 let bibliotecaArquivosLocais = {};
 let playlistOrdenada = [];
 let salaAtual = null;
 let nomeUsuarioLogado = null; 
-const LIMITE_PESSOAS = 2;
+const LIMITE_PESSOAS = 8;
+
+function carregarCacheLocal() {
+    try {
+        const cacheSalva = localStorage.getItem('retro_playlist_cache');
+        if (cacheSalva) {
+            bibliotecaArquivosLocais = JSON.parse(cacheSalva);
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function salvarCacheLocal() {
+    localStorage.setItem('retro_playlist_cache', JSON.stringify(bibliotecaArquivosLocais));
+}
+
+carregarCacheLocal();
 
 btnAbrirBiblioteca.addEventListener('click', () => {
     painelBiblioteca.classList.remove('escondida');
@@ -40,6 +62,15 @@ btnAbrirBiblioteca.addEventListener('click', () => {
 
 btnFecharBiblioteca.addEventListener('click', () => {
     painelBiblioteca.classList.add('escondida');
+});
+
+btnAbrirHistorico.addEventListener('click', () => {
+    painelHistorico.classList.remove('escondida');
+    ouvirHistoricoSalas();
+});
+
+btnFecharHistorico.addEventListener('click', () => {
+    painelHistorico.classList.add('escondida');
 });
 
 btnEntrarSistema.addEventListener('click', async () => {
@@ -61,6 +92,7 @@ btnEntrarSistema.addEventListener('click', async () => {
                 nomeUsuarioLogado = usuario.toUpperCase();
                 telaLogin.classList.add('escondido');
                 adicionarAvisoSistema("Bem-vindo de volta, " + nomeUsuarioLogado);
+                ouvirHistoricoSalas();
             } else {
                 alert("Palavra-passe incorreta!");
             }
@@ -70,12 +102,34 @@ btnEntrarSistema.addEventListener('click', async () => {
             telaLogin.classList.add('escondido');
             alert("Conta criada e registada no servidor com sucesso!");
             adicionarAvisoSistema("Nova conta ativa: " + nomeUsuarioLogado);
+            ouvirHistoricoSalas();
         }
     } catch (e) {
         alert("Erro de conexão com o servidor.");
-        console.error(e);
     }
 });
+
+function ouvirHistoricoSalas() {
+    onValue(ref(db, 'salas'), (snapshot) => {
+        listaSalasHistorico.innerHTML = '';
+        if (snapshot.exists()) {
+            const salas = snapshot.val();
+            Object.keys(salas).forEach(idSala => {
+                const sala = salas[idSala];
+                const participantes = sala.participantes ? Object.keys(sala.participantes) : [];
+                
+                const div = document.createElement('div');
+                div.classList.add('item-sala-historico');
+                div.innerHTML = "<strong>Sala:</strong> " + idSala + "<br>" +
+                                "<strong>Criador:</strong> " + sala.criador + "<br>" +
+                                "<strong>Usuários (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
+                listaSalasHistorico.appendChild(div);
+            });
+        } else {
+            listaSalasHistorico.innerHTML = "<p style='font-size:12px;'>Nenhuma sala ativa no servidor.</p>";
+        }
+    });
+}
 
 btnCriarSala.addEventListener('click', async () => {
     if (!nomeUsuarioLogado) return;
@@ -88,17 +142,13 @@ btnCriarSala.addEventListener('click', async () => {
 
     try {
         const salaRef = ref(db, 'salas/' + idSala);
-        const snapshot = await get(salaRef);
-
-        if (!snapshot.exists()) {
-            await set(salaRef, { 
-                criador: nomeUsuarioLogado, 
-                quantidadePessoas: 1,
-                comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
-            });
-        } else {
-            await update(salaRef, { quantidadePessoas: 1 });
-        }
+        
+        await set(salaRef, { 
+            criador: nomeUsuarioLogado, 
+            quantidadePessoas: 1,
+            participantes: { [nomeUsuarioLogado]: true },
+            comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
+        });
 
         conectarAoChatEPlaylist(idSala);
         
@@ -127,20 +177,25 @@ btnEntrarSala.addEventListener('click', async () => {
         
         if (snapshot.exists()) {
             const dadosSala = snapshot.val();
-            if (dadosSala.quantidadePessoas >= LIMITE_PESSOAS && dadosSala.criador !== nomeUsuarioLogado) {
-                alert("A playlist está cheia!");
+            const participantes = dadosSala.participantes || {};
+            
+            if (!participantes[nomeUsuarioLogado] && dadosSala.quantidadePessoas >= LIMITE_PESSOAS) {
+                alert("A playlist está cheia! Limite de 8 usuários atingido.");
                 return;
             }
             
             salaAtual = entrada;
             codigoGeradoTxt.textContent = entrada;
             
-            let novasPessoas = (dadosSala.quantidadePessoas || 1);
-            if (dadosSala.criador !== nomeUsuarioLogado) {
-                novasPessoas = novasPessoas + 1;
+            if (!participantes[nomeUsuarioLogado]) {
+                participantes[nomeUsuarioLogado] = true;
+                const novasPessoas = dadosSala.quantidadePessoas + 1;
+                await update(salaRef, { 
+                    quantidadePessoas: novasPessoas,
+                    participantes: participantes
+                });
             }
-
-            await update(salaRef, { quantidadePessoas: novasPessoas });
+            
             conectarAoChatEPlaylist(entrada);
             
             push(ref(db, 'salas/' + entrada + '/chat'), {
@@ -204,6 +259,7 @@ function conectarAoChatEPlaylist(idSala) {
                 player.play().catch(() => {});
             } else {
                 adicionarAvisoSistema("[AVISO] " + comando.enviadoPor + " deu play em '" + comando.nomeMusica + "', mas tu precisas carregar essa mídia no teu botão para sincronizar!");
+                atualizarInterfaceBiblioteca();
             }
         }
     });
@@ -226,6 +282,7 @@ inputArquivo.addEventListener('change', function(evento) {
             texto: "[SISTEMA] " + nomeUsuarioLogado + " adicionou a mídia: " + arquivo.name
         });
     }
+    salvarCacheLocal();
     atualizarInterfaceBiblioteca();
 });
 
@@ -301,4 +358,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-                                  }
+                                     }
