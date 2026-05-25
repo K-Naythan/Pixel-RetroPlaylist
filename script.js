@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getDatabase, ref, set, push, onChildAdded, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+import { getDatabase, ref, set, push, onChildAdded, onValue, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
 const firebaseConfig = {
     databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
@@ -24,11 +24,23 @@ const caixaChat = document.getElementById('caixa-chat');
 const inputMensagem = document.getElementById('input-mensagem');
 const btnEnviarMensagem = document.getElementById('btn-enviar-mensagem');
 
-let playlist = [];
-let musicaAtualIndex = 0;
+const painelBiblioteca = document.getElementById('painel-biblioteca');
+const btnAbrirBiblioteca = document.getElementById('btn-abrir-biblioteca');
+const btnFecharBiblioteca = document.getElementById('btn-fechar-biblioteca');
+
+let bibliotecaArquivosLocais = {};
+let playlistOrdenada = [];
 let salaAtual = null;
 let nomeUsuarioLogado = null; 
 const LIMITE_PESSOAS = 2;
+
+btnAbrirBiblioteca.addEventListener('click', () => {
+    painelBiblioteca.classList.remove('escondida');
+});
+
+btnFecharBiblioteca.addEventListener('click', () => {
+    painelBiblioteca.classList.add('escondida');
+});
 
 btnEntrarSistema.addEventListener('click', async () => {
     const usuario = inputUsuario.value.trim().toLowerCase();
@@ -60,7 +72,7 @@ btnEntrarSistema.addEventListener('click', async () => {
             adicionarAvisoSistema("Nova conta ativa: " + nomeUsuarioLogado);
         }
     } catch (e) {
-        alert("Erro de conexão com o servidor. Verifica as tuas regras do Firebase.");
+        alert("Erro de conexão com o servidor.");
         console.error(e);
     }
 });
@@ -77,7 +89,11 @@ btnCriarSala.addEventListener('click', async () => {
     adicionarAvisoSistema("A iniciar cache da sala " + idSala + " no servidor...");
 
     try {
-        await set(ref(db, 'salas/' + idSala), { criador: nomeUsuarioLogado, quantidadePessoas: 1 });
+        await set(ref(db, 'salas/' + idSala), { 
+            criador: nomeUsuarioLogado, 
+            quantidadePessoas: 1,
+            comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
+        });
         conectarAoChatEPlaylist(idSala);
     } catch (e) { 
         console.error(e);
@@ -118,7 +134,7 @@ btnEntrarSala.addEventListener('click', async () => {
 });
 
 function conectarAoChatEPlaylist(idSala) {
-    playlist = [];
+    playlistOrdenada = [];
     listaPlaylist.innerHTML = '';
     caixaChat.innerHTML = '';
 
@@ -133,9 +149,24 @@ function conectarAoChatEPlaylist(idSala) {
 
     onChildAdded(ref(db, 'salas/' + idSala + '/musicas'), (snapshot) => {
         const musica = snapshot.val();
-        if (!playlist.some(m => m.nome === musica.nome)) {
-            playlist.push(musica);
-            atualizarInterfacePlaylist();
+        if (!playlistOrdenada.some(m => m.nome === musica.nome)) {
+            playlistOrdenada.push(musica);
+            atualizarInterfaceBiblioteca();
+        }
+    });
+
+    onValue(ref(db, 'salas/' + idSala + '/comandoPlayer'), (snapshot) => {
+        const comando = snapshot.val();
+        if (!comando || comando.enviadoPor === nomeUsuarioLogado) return;
+
+        if (comando.acao === "play") {
+            const arquivoLocal = bibliotecaArquivosLocais[comando.nomeMusica];
+            if (arquivoLocal) {
+                player.src = arquivoLocal.url;
+                player.play().catch(() => {});
+            } else {
+                adicionarAvisoSistema("[AVISO] " + comando.enviadoPor + " deu play em '" + comando.nomeMusica + "', mas tu precisas carregar essa mídia no teu botão para sincronizar!");
+            }
         }
     });
 }
@@ -147,38 +178,60 @@ inputArquivo.addEventListener('change', function(evento) {
     for (let i = 0; i < arquivos.length; i++) {
         const arquivo = arquivos[i];
         const urlBlob = URL.createObjectURL(arquivo);
-        const novaMusica = { nome: arquivo.name, url: urlBlob };
+        
+        bibliotecaArquivosLocais[arquivo.name] = { nome: arquivo.name, url: urlBlob };
 
-        if (!playlist.some(m => m.nome === novaMusica.nome)) {
-            playlist.push(novaMusica);
-            atualizarInterfacePlaylist();
-        }
-
-        push(ref(db, 'salas/' + salaAtual + '/musicas'), novaMusica);
+        push(ref(db, 'salas/' + salaAtual + '/musicas'), { nome: arquivo.name });
+        
         push(ref(db, 'salas/' + salaAtual + '/chat'), {
             tipo: "sistema",
-            texto: "[" + nomeUsuarioLogado + "] adicionou a faixa: " + arquivo.name
+            texto: "[SISTEMA] " + nomeUsuarioLogado + " adicionou a mídia: " + arquivo.name
         });
     }
+    atualizarInterfaceBiblioteca();
 });
 
-function atualizarInterfacePlaylist() {
+function atualizarInterfaceBiblioteca() {
     listaPlaylist.innerHTML = ''; 
-    playlist.forEach((musica, index) => {
+    playlistOrdenada.forEach((musica) => {
         const item = document.createElement('li');
         item.textContent = musica.nome;
         item.classList.add('item-musica');
-        item.addEventListener('click', () => tocarMusica(index));
+        
+        if (bibliotecaArquivosLocais[musica.nome]) {
+            item.style.borderLeft = "4px solid #00ff00";
+            item.style.paddingLeft = "5px";
+        } else {
+            item.style.borderLeft = "4px solid #ff0000";
+            item.style.paddingLeft = "5px";
+        }
+
+        item.addEventListener('click', () => forcarReproducaoSincronizada(musica.nome));
         listaPlaylist.appendChild(item);
     });
 }
 
-function tocarMusica(index) {
-    if (index >= 0 && index < playlist.length) {
-        musicaAtualIndex = index;
-        player.src = playlist[index].url;
-        player.play().catch(() => {});
+function forcarReproducaoSincronizada(nomeMusica) {
+    const arquivoLocal = bibliotecaArquivosLocais[nomeMusica];
+    
+    if (!arquivoLocal) {
+        alert("Carrega o arquivo '" + nomeMusica + "' primeiro para ouvirem juntos!");
+        return;
     }
+
+    player.src = arquivoLocal.url;
+    player.play().catch(() => {});
+
+    set(ref(db, 'salas/' + salaAtual + '/comandoPlayer'), {
+        acao: "play",
+        nomeMusica: nomeMusica,
+        enviadoPor: nomeUsuarioLogado
+    });
+
+    push(ref(db, 'salas/' + salaAtual + '/chat'), {
+        tipo: "sistema",
+        texto: "[SISTEMA] " + nomeUsuarioLogado + " escolheu para ouvir: " + nomeMusica
+    });
 }
 
 btnEnviarMensagem.addEventListener('click', enviarMensagemDoInput);
@@ -207,11 +260,7 @@ function adicionarMensagemNaTela(usuario, texto) {
 function adicionarAvisoSistema(texto) {
     const div = document.createElement('div');
     div.classList.add('sistema-aviso');
-    div.textContent = "[SISTEMA] " + texto;
+    div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-}
-
-player.addEventListener('ended', () => {
-    if (musicaAtualIndex + 1 < playlist.length) { tocarMusica(musicaAtualIndex + 1); }
-});
+        }
