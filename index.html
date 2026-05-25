@@ -82,6 +82,13 @@
             flex-grow: 1;
             overflow-y: auto;
         }
+        .item-sala-historico {
+            background: #e0e0e0;
+            border: 1px solid #808080;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -99,10 +106,11 @@
     <div class="janela-windows">
         <h2>Minha Playlist Retro</h2>
         <video id="player-mp4" controls width="100%"></video>
-        <div class="importar-container" style="display: flex; gap: 10px; margin-top: 10px;">
-            <label for="importar-arquivo" class="botao-retro" style="flex: 1; text-align: center;">Carregar Minhas Mídias</label>
+        <div class="importar-container" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+            <label for="importar-arquivo" class="botao-retro" style="flex: 1; text-align: center; min-width: 120px;">Carregar Minhas Mídias</label>
             <input type="file" id="importar-arquivo" accept="video/mp4, audio/mp3, audio/*, video/*" multiple style="display: none;">
-            <button id="btn-abrir-biblioteca" class="botao-retro" style="flex: 1;">Abrir Biblioteca</button>
+            <button id="btn-abrir-biblioteca" class="botao-retro" style="flex: 1; min-width: 120px;">Abrir Biblioteca</button>
+            <button id="btn-abrir-historico" class="botao-retro" style="flex: 1; min-width: 120px;">Histórico de Salas</button>
         </div>
     </div>
 
@@ -114,6 +122,16 @@
         <div class="corpo-flutuante">
             <p style="font-size: 11px; margin-bottom: 8px; color: #333;">Verde: pronto na cache (tempo real). Vermelho: precisa de carregar no botão externo.</p>
             <ul id="lista-playlist"></ul>
+        </div>
+    </div>
+
+    <div id="painel-historico" class="janela-windows janela-flutuante escondida">
+        <div class="barra-titulo-flutuante">
+            <span>Histórico de Salas</span>
+            <button id="btn-fechar-historico" class="botao-fechar-painel">X</button>
+        </div>
+        <div class="corpo-flutuante" id="lista-salas-historico">
+            <p style="font-size: 11px; color: #333;">A carregar lista de salas ativos no servidor...</p>
         </div>
     </div>
 
@@ -139,4 +157,4 @@
 
     <script type="module" src="script.js"></script>
 </body>
-            </html>
+    </html>
