@@ -9,10 +9,17 @@ let app, db;
 try {
     app = initializeApp(firebaseConfig);
     db = getDatabase(app);
-} catch (erro) {
-    console.error("Erro Firebase:", erro);
+} catch (erro) { 
+    console.error("Erro Firebase, rodando em modo offline:", erro); 
 }
 
+// ELEMENTOS DE LOGIN
+const telaLogin = document.getElementById('tela-login');
+const inputUsuario = document.getElementById('login-usuario');
+const inputSenha = document.getElementById('login-senha');
+const btnEntrarSistema = document.getElementById('btn-entrar-sistema');
+
+// ELEMENTOS DO APP
 const inputArquivo = document.getElementById('importar-arquivo');
 const player = document.getElementById('player-mp4');
 const listaPlaylist = document.getElementById('lista-playlist');
@@ -26,62 +33,109 @@ const btnEnviarMensagem = document.getElementById('btn-enviar-mensagem');
 
 let playlist = [];
 let musicaAtualIndex = 0;
-let salaAtual = localStorage.getItem('sala_atual') || null;
+let salaAtual = null;
+let nomeUsuarioLogado = null; 
 const LIMITE_PESSOAS = 2;
 
-// Recuperar sala caso a aba reinicie
-if (salaAtual) {
-    codigoGeradoTxt.textContent = salaAtual;
-    conectarAoChatEPlaylist(salaAtual);
-}
+// 1. SISTEMA DE LOGIN E CADASTRO AUTOMÁTICO
+btnEntrarSistema.addEventListener('click', async () => {
+    const usuario = inputUsuario.value.trim().toLowerCase();
+    const senha = inputSenha.value.trim();
 
-// 1. CRIAR SALA (COM MEMÓRIA ANTI-RESET)
+    if (!usuario || !senha) {
+        alert("Insira o usuário e a palavra-passe!");
+        return;
+    }
+
+    if (!db) {
+        nomeUsuarioLogado = usuario.toUpperCase();
+        telaLogin.classList.add('escondido');
+        return;
+    }
+
+    try {
+        const userRef = ref(db, 'usuarios/' + usuario);
+        const snapshot = await get(userRef);
+
+        if (snapshot.exists()) {
+            const dadosUser = snapshot.val();
+            if (dadosUser.senha === senha) {
+                nomeUsuarioLogado = usuario.toUpperCase();
+                telaLogin.classList.add('escondido');
+                adicionarAvisoSistema("Bem-vindo de volta, " + nomeUsuarioLogado);
+            } else {
+                alert("Palavra-passe incorreta!");
+            }
+        } else {
+            await set(userRef, { senha: senha });
+            nomeUsuarioLogado = usuario.toUpperCase();
+            telaLogin.classList.add('escondido');
+            alert("Conta criada com sucesso!");
+            adicionarAvisoSistema("Nova conta ativa: " + nomeUsuarioLogado);
+        }
+    } catch (e) {
+        nomeUsuarioLogado = usuario.toUpperCase();
+        telaLogin.classList.add('escondido');
+    }
+});
+
+// 2. CRIAR SALA (PADRÃO EXCLUSIVO: SALA-####)
 btnCriarSala.addEventListener('click', async () => {
-    const idSala = "SALA-" + Math.floor(1000 + Math.random() * 9000);
+    if (!nomeUsuarioLogado) return;
+    
+    const numeros = Math.floor(1000 + Math.random() * 9000);
+    const idSala = "SALA-" + numeros;
+    
     salaAtual = idSala;
-    localStorage.setItem('sala_atual', idSala);
     codigoGeradoTxt.textContent = idSala;
     
-    adicionarAvisoSistema("Criando sala " + idSala + "...");
+    adicionarAvisoSistema("Criando sala online " + idSala + "...");
 
     if (db) {
         try {
-            await set(ref(db, 'salas/' + idSala), { criador: true, quantidadePessoas: 1 });
+            await set(ref(db, 'salas/' + idSala), { criador: nomeUsuarioLogado, quantidadePessoas: 1 });
             conectarAoChatEPlaylist(idSala);
-        } catch (e) {
-            adicionarAvisoSistema("Sala criada no dispositivo (Modo Local).");
+        } catch (e) { 
+            adicionarAvisoSistema("Sala criada localmente (Offline)."); 
         }
     }
 });
 
-// 2. ENTRAR NA SALA
+// 3. ENTRAR NA SALA (CORRIGE ENTRADAS SEM "SALA-")
 btnEntrarSala.addEventListener('click', async () => {
-    const idSala = inputCodigoConvite.value.trim().toUpperCase();
-    if (!idSala) return;
+    if (!nomeUsuarioLogado) return;
+    
+    let entrada = inputCodigoConvite.value.trim().toUpperCase();
+    if (!entrada) return;
 
-    salaAtual = idSala;
-    localStorage.setItem('sala_atual', idSala);
-    codigoGeradoTxt.textContent = idSala;
+    // Se o usuário digitar apenas os números, o app monta o prefixo automaticamente
+    if (!entrada.startsWith("SALA-")) {
+        entrada = "SALA-" + entrada;
+    }
+
+    salaAtual = entrada;
+    codigoGeradoTxt.textContent = entrada;
 
     if (db) {
         try {
-            const snapshot = await get(ref(db, 'salas/' + idSala));
+            const snapshot = await get(ref(db, 'salas/' + entrada));
             if (snapshot.exists()) {
                 const dadosSala = snapshot.val();
                 if (dadosSala.quantidadePessoas >= LIMITE_PESSOAS) {
-                    alert("A playlist está cheia!");
+                    alert("A playlist está cheia! Limite: " + LIMITE_PESSOAS + " pessoas.");
                     return;
                 }
-                await set(ref(db, 'salas/' + idSala + '/quantidadePessoas'), (dadosSala.quantidadePessoas || 1) + 1);
+                await set(ref(db, 'salas/' + entrada + '/quantidadePessoas'), (dadosSala.quantidadePessoas || 1) + 1);
             }
-        } catch (e) { console.log("Erro de rede, conectando localmente."); }
+        } catch (e) { 
+            console.log("Modo local ou erro de rede."); 
+        }
     }
-    
-    conectarAoChatEPlaylist(idSala);
-    adicionarAvisoSistema("Conectado à sala: " + idSala);
+    conectarAoChatEPlaylist(entrada);
+    adicionarAvisoSistema("Conectado com sucesso à sala " + entrada);
 });
 
-// 3. CONEXÃO EM TEMPO REAL
+// 4. ESCUTAS EM TEMPO REAL
 function conectarAoChatEPlaylist(idSala) {
     if (!db) return;
     try {
@@ -101,15 +155,17 @@ function conectarAoChatEPlaylist(idSala) {
                 atualizarInterfacePlaylist();
             }
         });
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error("Erro escutas:", e); 
+    }
 }
 
-// 4. IMPORTAR MP4 E MP3
+// 5. CARREGAR ARQUIVOS (MP3 E MP4)
 inputArquivo.addEventListener('change', function(evento) {
     const arquivos = evento.target.files;
-    if (!salaAtual) {
-        alert("Crie ou entre em uma playlist primeiro!");
-        return;
+    if (!salaAtual) { 
+        alert("Crie ou entre em uma sala primeiro!"); 
+        return; 
     }
 
     for (let i = 0; i < arquivos.length; i++) {
@@ -126,7 +182,7 @@ inputArquivo.addEventListener('change', function(evento) {
             push(ref(db, 'salas/' + salaAtual + '/musicas'), novaMusica);
             push(ref(db, 'salas/' + salaAtual + '/chat'), {
                 tipo: "sistema",
-                texto: "A faixa '" + arquivo.name + "' foi adicionada!"
+                texto: "[" + nomeUsuarioLogado + "] adicionou a faixa: " + arquivo.name
             });
         }
     }
@@ -151,7 +207,7 @@ function tocarMusica(index) {
     }
 }
 
-// 5. CHAT
+// 6. CHAT COLETIVO
 btnEnviarMensagem.addEventListener('click', enviarMensagemDoInput);
 inputMensagem.addEventListener('keypress', (e) => { if (e.key === 'Enter') enviarMensagemDoInput(); });
 
@@ -162,11 +218,11 @@ function enviarMensagemDoInput() {
     if (db) {
         push(ref(db, 'salas/' + salaAtual + '/chat'), {
             tipo: "usuario",
-            usuario: "Usuário",
+            usuario: nomeUsuarioLogado,
             texto: texto
         });
     } else {
-        adicionarMensagemNaTela("Você", texto);
+        adicionarMensagemNaTela(nomeUsuarioLogado + " (Offline)", texto);
     }
     inputMensagem.value = '';
 }
@@ -188,7 +244,7 @@ function adicionarAvisoSistema(texto) {
 }
 
 player.addEventListener('ended', () => {
-    if (musicaAtualIndex + 1 < playlist.length) {
-        tocarMusica(musicaAtualIndex + 1);
+    if (musicaAtualIndex + 1 < playlist.length) { 
+        tocarMusica(musicaAtualIndex + 1); 
     }
 });
