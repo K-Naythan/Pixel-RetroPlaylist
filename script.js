@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getDatabase, ref, set, push, onChildAdded, onValue, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+import { getDatabase, ref, set, push, onChildAdded, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
 const firebaseConfig = {
     databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
@@ -85,20 +85,26 @@ btnCriarSala.addEventListener('click', async () => {
     
     salaAtual = idSala;
     codigoGeradoTxt.textContent = idSala;
-    
-    adicionarAvisoSistema("A iniciar cache da sala " + idSala + " no servidor...");
 
     try {
-        await set(ref(db, 'salas/' + idSala), { 
-            criador: nomeUsuarioLogado, 
-            quantidadePessoas: 1,
-            comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
-        });
+        const salaRef = ref(db, 'salas/' + idSala);
+        const snapshot = await get(salaRef);
+
+        if (!snapshot.exists()) {
+            await set(salaRef, { 
+                criador: nomeUsuarioLogado, 
+                quantidadePessoas: 1,
+                comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
+            });
+        } else {
+            await update(salaRef, { quantidadePessoas: 1 });
+        }
+
         conectarAoChatEPlaylist(idSala);
         
         push(ref(db, 'salas/' + idSala + '/chat'), {
             tipo: "sistema",
-            texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " entrou na playlist e criou a sala."
+            texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " iniciou a sessão na sala."
         });
     } catch (e) { 
         console.error(e);
@@ -116,10 +122,12 @@ btnEntrarSala.addEventListener('click', async () => {
     }
 
     try {
-        const snapshot = await get(ref(db, 'salas/' + entrada));
+        const salaRef = ref(db, 'salas/' + entrada);
+        const snapshot = await get(salaRef);
+        
         if (snapshot.exists()) {
             const dadosSala = snapshot.val();
-            if (dadosSala.quantidadePessoas >= LIMITE_PESSOAS) {
+            if (dadosSala.quantidadePessoas >= LIMITE_PESSOAS && dadosSala.criador !== nomeUsuarioLogado) {
                 alert("A playlist está cheia!");
                 return;
             }
@@ -127,7 +135,12 @@ btnEntrarSala.addEventListener('click', async () => {
             salaAtual = entrada;
             codigoGeradoTxt.textContent = entrada;
             
-            await set(ref(db, 'salas/' + entrada + '/quantidadePessoas'), (dadosSala.quantidadePessoas || 1) + 1);
+            let novasPessoas = (dadosSala.quantidadePessoas || 1);
+            if (dadosSala.criador !== nomeUsuarioLogado) {
+                novasPessoas = novasPessoas + 1;
+            }
+
+            await update(salaRef, { quantidadePessoas: novasPessoas });
             conectarAoChatEPlaylist(entrada);
             
             push(ref(db, 'salas/' + entrada + '/chat'), {
@@ -146,6 +159,22 @@ function conectarAoChatEPlaylist(idSala) {
     playlistOrdenada = [];
     listaPlaylist.innerHTML = '';
     caixaChat.innerHTML = '';
+
+    const salaRef = ref(db, 'salas/' + idSala);
+    get(salaRef).then((snapshot) => {
+        if (snapshot.exists()) {
+            const dados = snapshot.val();
+            if (dados.musicas) {
+                Object.keys(dados.musicas).forEach(key => {
+                    const musica = dados.musicas[key];
+                    if (!playlistOrdenada.some(m => m.nome === musica.nome)) {
+                        playlistOrdenada.push(musica);
+                    }
+                });
+                atualizarInterfaceBiblioteca();
+            }
+        }
+    });
 
     onChildAdded(ref(db, 'salas/' + idSala + '/chat'), (snapshot) => {
         const dados = snapshot.val();
@@ -272,4 +301,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-                                  }pp
+                                  }
