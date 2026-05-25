@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getDatabase, ref, set, push, onChildAdded, onValue, get, update, onDisconnect, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+import { getDatabase, ref, set, push, onChildAdded, onValue, get, update, onDisconnect } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
 const firebaseConfig = {
     databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
@@ -123,8 +123,9 @@ function ouvirHistoricoSalas() {
                 const participantes = sala.participantes ? Object.keys(sala.participantes) : [];
                 
                 const pertenceASala = sala.criador === nomeUsuarioLogado || participantes.includes(nomeUsuarioLogado);
+                const salaAtiva = sala.quantidadePessoas > 0 && participantes.length > 0;
 
-                if (pertenceASala) {
+                if (pertenceASala && salaAtiva) {
                     encontrouSalas = true;
                     const div = document.createElement('div');
                     div.classList.add('item-sala-historico');
@@ -137,13 +138,60 @@ function ouvirHistoricoSalas() {
         }
 
         if (!encontrouSalas) {
-            listaSalasHistorico.innerHTML = "<p style='font-size:12px;'>Não estás vinculado a nenhuma sala ativa.</p>";
+            listaSalasHistorico.innerHTML = "<p style='font-size:12px;'>Não estás vinculado a nenhuma sala ativa no momento.</p>";
         }
     });
 }
 
+async function sairDaSalaAtual() {
+    if (!salaAtual || !nomeUsuarioLogado) return;
+
+    try {
+        const salaRef = ref(db, 'salas/' + salaAtual);
+        const snapshot = await get(salaRef);
+
+        if (snapshot.exists()) {
+            const dadosSala = snapshot.val();
+            const participantes = dadosSala.participantes || {};
+            
+            if (participantes[nomeUsuarioLogado]) {
+                delete participantes[nomeUsuarioLogado];
+                
+                let novasPessoas = (dadosSala.quantidadePessoas || 1) - 1;
+                if (novasPessoas < 0) novasPessoas = 0;
+
+                if (novasPessoas === 0) {
+                    await set(salaRef, null);
+                } else {
+                    await update(salaRef, {
+                        quantidadePessoas: novasPessoas,
+                        participantes: participantes
+                    });
+                    
+                    push(ref(db, 'salas/' + salaAtual + '/chat'), {
+                        tipo: "sistema",
+                        texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " abandonou a sala."
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error(e);
+    }
+
+    salaAtual = null;
+    codigoGeradoTxt.textContent = "-";
+    listaPlaylist.innerHTML = '';
+    caixaChat.innerHTML = '';
+    playlistOrdenada = [];
+}
+
 btnCriarSala.addEventListener('click', async () => {
     if (!nomeUsuarioLogado) return;
+    
+    if (salaAtual) {
+        await sairDaSalaAtual();
+    }
     
     const numeros = Math.floor(1000 + Math.random() * 9000);
     const idSala = "SALA-" + numeros;
@@ -181,6 +229,15 @@ btnEntrarSala.addEventListener('click', async () => {
 
     if (!entrada.startsWith("SALA-")) {
         entrada = "SALA-" + entrada;
+    }
+
+    if (salaAtual === entrada) {
+        alert("Já estás dentro desta sala!");
+        return;
+    }
+
+    if (salaAtual) {
+        await sairDaSalaAtual();
     }
 
     try {
@@ -225,14 +282,7 @@ btnEntrarSala.addEventListener('click', async () => {
 
 function configurarPresencaOnDisconnect(idSala) {
     const participanteRef = ref(db, 'salas/' + idSala + '/participantes/' + nomeUsuarioLogado);
-    const qntPessoasRef = ref(db, 'salas/' + idSala + '/quantidadePessoas');
-    
     onDisconnect(participanteRef).remove();
-    
-    onDisconnect(qntPessoasRef).transaction((atual) => {
-        if (atual === null) return 0;
-        return atual > 0 ? atual - 1 : 0;
-    });
 }
 
 function conectarAoChatEPlaylist(idSala) {
