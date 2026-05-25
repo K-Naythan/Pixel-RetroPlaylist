@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getDatabase, ref, set, push, onChildAdded, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+import { getDatabase, ref, set, push, onChildAdded, onValue, get, update, onDisconnect, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
 const firebaseConfig = {
     databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
@@ -110,23 +110,34 @@ btnEntrarSistema.addEventListener('click', async () => {
 });
 
 function ouvirHistoricoSalas() {
+    if (!nomeUsuarioLogado) return;
+
     onValue(ref(db, 'salas'), (snapshot) => {
         listaSalasHistorico.innerHTML = '';
+        let encontrouSalas = false;
+
         if (snapshot.exists()) {
             const salas = snapshot.val();
             Object.keys(salas).forEach(idSala => {
                 const sala = salas[idSala];
                 const participantes = sala.participantes ? Object.keys(sala.participantes) : [];
                 
-                const div = document.createElement('div');
-                div.classList.add('item-sala-historico');
-                div.innerHTML = "<strong>Sala:</strong> " + idSala + "<br>" +
-                                "<strong>Criador:</strong> " + sala.criador + "<br>" +
-                                "<strong>Usuários (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
-                listaSalasHistorico.appendChild(div);
+                const pertenceASala = sala.criador === nomeUsuarioLogado || participantes.includes(nomeUsuarioLogado);
+
+                if (pertenceASala) {
+                    encontrouSalas = true;
+                    const div = document.createElement('div');
+                    div.classList.add('item-sala-historico');
+                    div.innerHTML = "<strong>Sala:</strong> " + idSala + "<br>" +
+                                    "<strong>Criador:</strong> " + sala.criador + "<br>" +
+                                    "<strong>Usuários (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
+                    listaSalasHistorico.appendChild(div);
+                }
             });
-        } else {
-            listaSalasHistorico.innerHTML = "<p style='font-size:12px;'>Nenhuma sala ativa no servidor.</p>";
+        }
+
+        if (!encontrouSalas) {
+            listaSalasHistorico.innerHTML = "<p style='font-size:12px;'>Não estás vinculado a nenhuma sala ativa.</p>";
         }
     });
 }
@@ -150,6 +161,7 @@ btnCriarSala.addEventListener('click', async () => {
             comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
         });
 
+        configurarPresencaOnDisconnect(idSala);
         conectarAoChatEPlaylist(idSala);
         
         push(ref(db, 'salas/' + idSala + '/chat'), {
@@ -196,6 +208,7 @@ btnEntrarSala.addEventListener('click', async () => {
                 });
             }
             
+            configurarPresencaOnDisconnect(entrada);
             conectarAoChatEPlaylist(entrada);
             
             push(ref(db, 'salas/' + entrada + '/chat'), {
@@ -209,6 +222,18 @@ btnEntrarSala.addEventListener('click', async () => {
         alert("Erro ao procurar a sala.");
     }
 });
+
+function configurarPresencaOnDisconnect(idSala) {
+    const participanteRef = ref(db, 'salas/' + idSala + '/participantes/' + nomeUsuarioLogado);
+    const qntPessoasRef = ref(db, 'salas/' + idSala + '/quantidadePessoas');
+    
+    onDisconnect(participanteRef).remove();
+    
+    onDisconnect(qntPessoasRef).transaction((atual) => {
+        if (atual === null) return 0;
+        return atual > 0 ? atual - 1 : 0;
+    });
+}
 
 function conectarAoChatEPlaylist(idSala) {
     playlistOrdenada = [];
@@ -358,4 +383,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-                                     }
+                                             }
