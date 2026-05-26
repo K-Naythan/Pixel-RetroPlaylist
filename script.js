@@ -8,6 +8,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+// Seleção de Elementos do DOM
 const telaLogin = document.getElementById('tela-login');
 const inputUsuario = document.getElementById('login-usuario');
 const inputSenha = document.getElementById('login-senha');
@@ -33,12 +34,16 @@ const btnAbrirHistorico = document.getElementById('btn-abrir-historico');
 const btnFecharHistorico = document.getElementById('btn-fechar-historico');
 const listaSalasHistorico = document.getElementById('lista-salas-historico');
 
+const selectTipoSala = document.getElementById('select-tipo-sala');
+
+// Variáveis Globais de Controle
 let bibliotecaArquivosLocais = {};
 let playlistOrdenada = [];
 let salaAtual = null;
 let nomeUsuarioLogado = null; 
 const LIMITE_PESSOAS = 8;
 
+// Gerenciamento de Cache Local
 function carregarCacheLocal() {
     try {
         const cacheSalva = localStorage.getItem('retro_playlist_cache');
@@ -46,7 +51,7 @@ function carregarCacheLocal() {
             bibliotecaArquivosLocais = JSON.parse(cacheSalva);
         }
     } catch (e) {
-        console.error(e);
+        console.error("Erro ao carregar localStorage:", e);
     }
 }
 
@@ -56,6 +61,7 @@ function salvarCacheLocal() {
 
 carregarCacheLocal();
 
+// Eventos de Interface (Abrir e Fechar Janelas)
 btnAbrirBiblioteca.addEventListener('click', () => {
     painelBiblioteca.classList.remove('escondida');
 });
@@ -73,6 +79,7 @@ btnFecharHistorico.addEventListener('click', () => {
     painelHistorico.classList.add('escondida');
 });
 
+// Sistema de Login e Cadastro Automático
 btnEntrarSistema.addEventListener('click', async () => {
     const usuario = inputUsuario.value.trim().toLowerCase();
     const senha = inputSenha.value.trim();
@@ -100,7 +107,7 @@ btnEntrarSistema.addEventListener('click', async () => {
             await set(userRef, { senha: senha });
             nomeUsuarioLogado = usuario.toUpperCase();
             telaLogin.classList.add('escondido');
-            alert("Conta criada e registada no servidor com sucesso!");
+            alert("Conta criada e registrada no servidor com sucesso!");
             adicionarAvisoSistema("Nova conta ativa: " + nomeUsuarioLogado);
             ouvirHistoricoSalas();
         }
@@ -109,8 +116,11 @@ btnEntrarSistema.addEventListener('click', async () => {
     }
 });
 
+// Listener Dinâmico do Mural de Salas Ativas / Públicas
 function ouvirHistoricoSalas() {
     if (!nomeUsuarioLogado) return;
+
+    onValue(ref(db, 'pools_salas_ativas'), () => {}); // Listener fantasma limpo se necessário
 
     onValue(ref(db, 'salas'), (snapshot) => {
         listaSalasHistorico.innerHTML = '';
@@ -124,25 +134,43 @@ function ouvirHistoricoSalas() {
 
                 const participantes = sala.participantes ? Object.keys(sala.participantes) : [];
                 const pertenceASala = sala.criador === nomeUsuarioLogado || participantes.includes(nomeUsuarioLogado);
+                const ehPublica = sala.tipoExibicao === "publica";
                 const salaAtiva = (sala.quantidadePessoas >= 0);
 
-                if (pertenceASala && salaAtiva) {
+                // Mostra se o usuário pertence ou se for uma sala configurada como pública
+                if ((pertenceASala || ehPublica) && salaAtiva) {
                     encontrouSalas = true;
                     const div = document.createElement('div');
                     div.classList.add('item-sala-historico');
                     div.style.position = "relative";
                     div.style.marginBottom = "10px";
+                    div.style.padding = "10px";
+                    div.style.border = ehPublica && !pertenceASala ? "2px dashed #00ff00" : "1px solid #808080";
                     
                     let htmlBotaoEliminar = "";
                     if (sala.criador === nomeUsuarioLogado) {
-                        htmlBotaoEliminar = "<button class='botao-retro btn-eliminar-sala-remota' data-sala='" + idSala + "' style='position: absolute; right: 5px; top: 5px; padding: 2px 6px; font-size: 10px; background: #c0c0c0; border: 1px solid #000; cursor: pointer;'>Eliminar</button>";
+                        htmlBotaoEliminar = "<button class='botao-retro btn-eliminar-sala-remota' data-sala='" + idSala + "' style='position: absolute; right: 5px; top: 5px; padding: 2px 6px; font-size: 10px; cursor: pointer;'>Eliminar</button>";
                     }
 
+                    let etiquetaTipo = ehPublica ? " <span style='color:#008000; font-weight:bold;'>[PÚBLICA]</span>" : " <span style='color:#a06000; font-weight:bold;'>[PRIVADA]</span>";
+
                     div.innerHTML = htmlBotaoEliminar +
-                                    "<strong>Sala:</strong> " + idSala + "<br>" +
-                                    "<strong>Criador:</strong> " + sala.criador + "<br>" +
-                                    "<strong>Usuários (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
+                                    "<strong>Sala:</strong> " + idSala + etiquetaTipo + "<br>" +
+                                    "<strong>Dono:</strong> " + sala.criador + "<br>" +
+                                    "<strong>Pessoas (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
                     
+                    // Permite clique direto para entrar se for uma sala pública externa
+                    if (!pertenceASala && ehPublica) {
+                        div.style.cursor = "pointer";
+                        div.title = "Clique para se conectar a esta sala pública de forma direta";
+                        div.addEventListener('click', (e) => {
+                            if (!e.target.classList.contains('btn-eliminar-sala-remota')) {
+                                inputCodigoConvite.value = idSala;
+                                btnEntrarSala.click();
+                            }
+                        });
+                    }
+
                     listaSalasHistorico.appendChild(div);
                 }
             });
@@ -150,8 +178,9 @@ function ouvirHistoricoSalas() {
             const botoesEliminar = document.querySelectorAll('.btn-eliminar-sala-remota');
             botoesEliminar.forEach(botao => {
                 botao.addEventListener('click', async (e) => {
+                    e.stopPropagation();
                     const idSalaParaDeletar = e.target.getAttribute('data-sala');
-                    if (confirm("Tens certeza que desejas eliminar a " + idSalaParaDeletar + " remotamente do servidor? Todas as playlists vinculadas a ela sumirão.")) {
+                    if (confirm("Tens certeza que desejas eliminar a " + idSalaParaDeletar + " remotamente?")) {
                         await eliminarSalaRemotamente(idSalaParaDeletar);
                     }
                 });
@@ -159,28 +188,26 @@ function ouvirHistoricoSalas() {
         }
 
         if (!encontrouSalas) {
-            listaSalasHistorico.innerHTML = "<p style='font-size:12px;'>Não estás vinculado a nenhuma sala ativa no momento.</p>";
+            listaSalasHistorico.innerHTML = "<p style='font-size:12px; color:#555;'>Nenhuma sala pública ativa ou vinculada de momento.</p>";
         }
     });
 }
 
 async function eliminarSalaRemotamente(idSala) {
     try {
-        const salaRef = ref(db, 'salas/' + idSala);
-        await set(salaRef, null);
-        
+        await set(ref(db, 'salas/' + idSala), null);
         if (salaAtual === idSala) {
             salaAtual = null;
             codigoGeradoTxt.textContent = "-";
             listaPlaylist.innerHTML = '';
             caixaChat.innerHTML = '';
             playlistOrdenada = [];
-            alert("A sala em que estavas foi eliminada com sucesso!");
+            alert("A sua sala ativa foi removida do servidor remoto.");
         } else {
-            alert("A sala " + idSala + " foi removida com sucesso do banco de dados!");
+            alert("A sala " + idSala + " foi removida com sucesso!");
         }
     } catch (e) {
-        alert("Erro ao tentar eliminar a sala remotamente.");
+        alert("Erro de permissão ao tentar deletar.");
     }
 }
 
@@ -223,6 +250,7 @@ async function sairDaSalaAtual() {
     playlistOrdenada = [];
 }
 
+// Criação de Sala com Parâmetro de Visibilidade
 btnCriarSala.addEventListener('click', async () => {
     if (!nomeUsuarioLogado) return;
     
@@ -230,6 +258,7 @@ btnCriarSala.addEventListener('click', async () => {
         await sairDaSalaAtual();
     }
     
+    const tipoVisibilidade = selectTipoSala ? selectTipoSala.value : "privada";
     const numeros = Math.floor(1000 + Math.random() * 9000);
     const idSala = "SALA-" + numeros;
     
@@ -238,10 +267,10 @@ btnCriarSala.addEventListener('click', async () => {
 
     try {
         const salaRef = ref(db, 'salas/' + idSala);
-        
         await set(salaRef, { 
             criador: nomeUsuarioLogado, 
             quantidadePessoas: 1,
+            tipoExibicao: tipoVisibilidade,
             participantes: { [nomeUsuarioLogado]: true },
             comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
         });
@@ -284,7 +313,6 @@ btnEntrarSala.addEventListener('click', async () => {
         if (snapshot.exists()) {
             const dadosSala = snapshot.val();
             const participantes = dadosSala.participantes || {};
-            
             let novasPessoas = dadosSala.quantidadePessoas || 0;
 
             if (!participantes[nomeUsuarioLogado]) {
@@ -404,7 +432,6 @@ inputArquivo.addEventListener('change', function(evento) {
         const urlBlob = URL.createObjectURL(arquivo);
         
         bibliotecaArquivosLocais[arquivo.name] = { nome: arquivo.name, url: urlBlob };
-
         push(ref(db, 'salas/' + salaAtual + '/musicas'), { nome: arquivo.name });
         
         push(ref(db, 'salas/' + salaAtual + '/chat'), {
@@ -480,6 +507,23 @@ function adicionarMensagemNaTela(usuario, texto) {
     p.innerHTML = "<strong>" + usuario + ":</strong> " + texto;
     caixaChat.appendChild(p);
     caixaChat.scrollTop = caixaChat.scrollHeight;
+    
+    // EXECUÇÃO DO BIP RETRO (Apenas para mensagens externas recebidas)
+    if (usuario !== nomeUsuarioLogado) {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            
+            osc.type = "sine"; 
+            osc.frequency.setValueAtTime(580, audioCtx.currentTime); // Tom puro clássico de chat antigo
+            
+            osc.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.045); // Duração ultra rápida de 45 milissegundos
+        } catch (e) {
+            console.warn("AudioContext bloqueado ou não suportado:", e);
+        }
+    }
 }
 
 function adicionarAvisoSistema(texto) {
@@ -488,4 +532,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-        }
+    }
