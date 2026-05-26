@@ -1,5 +1,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getDatabase, ref, set, push, onChildAdded, onValue, get, update, onDisconnect } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+import { 
+    getAuth, 
+    signInWithPopup, 
+    GoogleAuthProvider, 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
     databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
@@ -7,11 +14,22 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth(app);
+const provedorGoogle = new GoogleAuthProvider();
 
 const telaLogin = document.getElementById('tela-login');
+const telaTermos = document.getElementById('tela-termos');
+const btnAceitarTermos = document.getElementById('btn-aceitar-termos');
+
+const btnAbaLogin = document.getElementById('btn-aba-login');
+const btnAbaRegistro = document.getElementById('btn-aba-registro');
+const containerEmail = document.getElementById('container-email');
+const inputEmail = document.getElementById('login-email');
+
 const inputUsuario = document.getElementById('login-usuario');
 const inputSenha = document.getElementById('login-senha');
 const btnEntrarSistema = document.getElementById('btn-entrar-sistema');
+const btnGoogleLogin = document.getElementById('btn-google-login');
 
 const inputArquivo = document.getElementById('importar-arquivo');
 const player = document.getElementById('player-mp4');
@@ -39,6 +57,7 @@ let bibliotecaArquivosLocais = {};
 let playlistOrdenada = [];
 let salaAtual = null;
 let nomeUsuarioLogado = null; 
+let modoAtual = "login";
 const LIMITE_PESSOAS = 8;
 
 function carregarCacheLocal() {
@@ -58,29 +77,47 @@ function salvarCacheLocal() {
 
 carregarCacheLocal();
 
-btnAbrirBiblioteca.addEventListener('click', () => {
-    painelBiblioteca.classList.remove('escondida');
-});
-
-btnFecharBiblioteca.addEventListener('click', () => {
-    painelBiblioteca.classList.add('escondida');
-});
+btnAbrirBiblioteca.addEventListener('click', () => { painelBiblioteca.classList.remove('escondida'); });
+btnFecharBiblioteca.addEventListener('click', () => { painelBiblioteca.classList.add('escondida'); });
 
 btnAbrirHistorico.addEventListener('click', () => {
     painelHistorico.classList.remove('escondida');
     ouvirHistoricoSalas();
 });
+btnFecharHistorico.addEventListener('click', () => { painelHistorico.classList.add('escondida'); });
 
-btnFecharHistorico.addEventListener('click', () => {
-    painelHistorico.classList.add('escondida');
+btnAbaLogin.addEventListener('click', () => {
+    modoAtual = "login";
+    btnAbaLogin.style.background = "#e0e0e0";
+    btnAbaLogin.style.fontWeight = "bold";
+    btnAbaRegistro.style.background = "#c0c0c0";
+    btnAbaRegistro.style.fontWeight = "normal";
+    containerEmail.classList.add('escondido');
+    btnEntrarSistema.textContent = "Entrar no Sistema";
+});
+
+btnAbaRegistro.addEventListener('click', () => {
+    modoAtual = "registro";
+    btnAbaRegistro.style.background = "#e0e0e0";
+    btnAbaRegistro.style.fontWeight = "bold";
+    btnAbaLogin.style.background = "#c0c0c0";
+    btnAbaLogin.style.fontWeight = "normal";
+    containerEmail.classList.remove('escondido');
+    btnEntrarSistema.textContent = "Criar Conta Segura";
 });
 
 btnEntrarSistema.addEventListener('click', async () => {
     const usuario = inputUsuario.value.trim().toLowerCase();
     const senha = inputSenha.value.trim();
+    const email = inputEmail.value.trim();
 
     if (!usuario || !senha) {
         alert("Insira o usuário e a palavra-passe!");
+        return;
+    }
+
+    if (modoAtual === "registro" && !email) {
+        alert("É necessário inserir um e-mail válido para efetuar o registro!");
         return;
     }
 
@@ -88,46 +125,108 @@ btnEntrarSistema.addEventListener('click', async () => {
         const userRef = ref(db, 'usuarios/' + usuario);
         const snapshot = await get(userRef);
 
-        if (snapshot.exists()) {
-            const dadosUser = snapshot.val();
-            
-            if (dadosUser.statusSistema === "banimento") {
-                alert("Esta conta foi BANIDA do Pixel-RetroPlaylist.\n\nMotivo: " + (dadosUser.motivoStatus || "Violação dos termos."));
+        if (modoAtual === "login") {
+            if (snapshot.exists()) {
+                const dadosUser = snapshot.val();
+                
+                if (dadosUser.statusSistema === "banimento") {
+                    alert("Esta conta foi BANIDA do Pixel-RetroPlaylist.\n\nMotivo: " + (dadosUser.motivoStatus || "Violação dos termos."));
+                    return;
+                }
+
+                if (dadosUser.email) {
+                    await signInWithEmailAndPassword(auth, dadosUser.email, senha);
+                } else if (dadosUser.senha !== senha) {
+                    alert("Palavra-passe incorreta!");
+                    return;
+                }
+
+                nomeUsuarioLogado = usuario.toUpperCase();
+                telaLogin.classList.add('escondido');
+                
+                chamarFluxoTermos(dadosUser);
+            } else {
+                alert("Esta conta não existe! Altere para a aba 'Registar' para criá-la.");
+            }
+        } else {
+            if (snapshot.exists()) {
+                alert("Este nome de usuário já está sendo utilizado por outra pessoa.");
                 return;
             }
 
-            if (dadosUser.senha === senha) {
-                nomeUsuarioLogado = usuario.toUpperCase();
-                telaLogin.classList.add('escondido');
-                adicionarAvisoSistema("Bem-vindo ao Pixel-RetroPlaylist, " + nomeUsuarioLogado);
-                
-                if (dadosUser.statusSistema === "aviso") {
-                    setTimeout(() => {
-                        alert("AVISO DE INFRAÇÃO:\n\nSua conta possui um aviso ativo.\nMotivo: " + (dadosUser.motivoStatus || "Comportamento inadequado."));
-                        adicionarAvisoSistema("[ALERTA DE SEGURANÇA] Conta sob aviso formal de moderação.");
-                    }, 1000);
-                }
-                
-                ouvirHistoricoSalas();
-            } else {
-                alert("Palavra-passe incorreta!");
-            }
-        } else {
+            const credencial = await createUserWithEmailAndPassword(auth, email, senha);
+            
             await set(userRef, { 
-                senha: senha,
+                uid: credencial.user.uid,
+                email: email,
                 statusSistema: "nenhuma",
                 motivoStatus: ""
             });
+
             nomeUsuarioLogado = usuario.toUpperCase();
             telaLogin.classList.add('escondido');
-            alert("Conta criada com sucesso no Pixel-RetroPlaylist!");
-            adicionarAvisoSistema("Nova conta activa: " + nomeUsuarioLogado);
-            ouvirHistoricoSalas();
+            alert("Conta criada com sucesso!");
+            
+            chamarFluxoTermos({ statusSistema: "nenhuma" });
         }
     } catch (e) {
-        alert("Erro de conexão com o servidor do Pixel-RetroPlaylist.");
+        alert("Erro na autenticação: " + e.message);
     }
 });
+
+btnGoogleLogin.addEventListener('click', async () => {
+    try {
+        const resultado = await signInWithPopup(auth, provedorGoogle);
+        const usuarioFirebase = resultado.user;
+        
+        let usernameBase = usuarioFirebase.displayName ? usuarioFirebase.displayName.split(' ')[0] : "USER";
+        let usuarioLimpo = usernameBase.toLowerCase().replace(/[^a-z0-9]/g, "");
+        
+        const userRef = ref(db, 'usuarios/' + usuarioLimpo);
+        const snapshot = await get(userRef);
+        
+        if (snapshot.exists() && snapshot.val().statusSistema === "banimento") {
+            alert("Este provedor Google encontra-se BANIDO do sistema.");
+            return;
+        }
+
+        let dadosUsuarioSalvar = snapshot.exists() ? snapshot.val() : null;
+
+        if (!snapshot.exists()) {
+            dadosUsuarioSalvar = {
+                uid: usuarioFirebase.uid,
+                email: usuarioFirebase.email,
+                statusSistema: "nenhuma",
+                motivoStatus: ""
+            };
+            await set(userRef, dadosUsuarioSalvar);
+        }
+
+        nomeUsuarioLogado = usuarioLimpo.toUpperCase();
+        telaLogin.classList.add('escondido');
+        
+        chamarFluxoTermos(dadosUsuarioSalvar);
+    } catch (e) {
+        alert("Falha ao autenticar com o provedor Google: " + e.message);
+    }
+});
+
+function chamarFluxoTermos(dadosUser) {
+    telaTermos.classList.remove('escondido');
+    
+    btnAceitarTermos.onclick = () => {
+        telaTermos.classList.add('escondido');
+        adicionarAvisoSistema("Bem-vindo ao Pixel-RetroPlaylist, " + nomeUsuarioLogado);
+        
+        if (dadosUser && dadosUser.statusSistema === "aviso") {
+            setTimeout(() => {
+                alert("AVISO DE INFRAÇÃO:\n\nSua conta possui um aviso ativo.\nMotivo: " + (dadosUser.motivoStatus || "Comportamento inadequado."));
+                adicionarAvisoSistema("[ALERTA DE SEGURANÇA] Conta sob aviso formal de moderação.");
+            }, 1000);
+        }
+        ouvirHistoricoSalas();
+    };
+}
 
 function ouvirHistoricoSalas() {
     if (!nomeUsuarioLogado) return;
@@ -543,4 +642,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-        }
+}
