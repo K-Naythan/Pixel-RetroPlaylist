@@ -1,27 +1,40 @@
+/* --- CONFIGURAÇÕES GERAIS DO SISTEMA --- */
 body {
-    background-color: #008080;
+    background-color: #008080 !important; /* Verde-azulado clássico do desktop */
     margin: 0;
-    padding: 15px;
-    font-family: "MS Sans Serif", Geneva, sans-serif;
+    padding: 10px;
+    font-family: monospace, sans-serif;
     color: #000000;
     font-size: 13px;
+    box-sizing: border-box;
 }
 
-.janela-windows {
+/* Título Principal do Site */
+h1, .titulo-principal {
+    color: #ffffff;
+    text-align: center;
+    font-size: 20px;
+    margin: 10px 0;
+    text-shadow: 2px 2px #000000;
+}
+
+/* --- JANELAS PADRÃO WINDOWS 98 --- */
+.janela-windows, .container-principal, #tela-login {
     background: #c0c0c0;
     border-top: 2px solid #ffffff;
     border-left: 2px solid #ffffff;
     border-right: 2px solid #808080;
     border-bottom: 2px solid #808080;
     box-shadow: 1px 1px 0px 0px #000000;
-    padding: 4px;
+    padding: 6px;
     margin-bottom: 15px;
 }
 
-.janela-windows h2 {
-    background: linear-gradient(90deg, #000080, #1084d0);
-    color: #ffffff;
-    margin: 0 0 10px 0;
+/* Barras de Título Azuis */
+.janela-windows h2, .barra-titulo {
+    background: linear-gradient(90deg, #000080, #1084d0) !important;
+    color: #ffffff !important;
+    margin: -6px -6px 10px -6px;
     padding: 4px 8px;
     font-size: 13px;
     font-weight: bold;
@@ -30,7 +43,32 @@ body {
     align-items: center;
 }
 
-.botao-retro, label.botao-retro {
+/* --- POP-UPS (BIBLIOTECA E HISTÓRICO) --- */
+/* Esta regra corrige o bug das janelas cinzentas gigantes que viste nos prints */
+#painel-biblioteca, #painel-historico {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 340px;
+    z-index: 9999;
+    background: #c0c0c0;
+    border-top: 2px solid #ffffff;
+    border-left: 2px solid #ffffff;
+    border-right: 2px solid #808080;
+    border-bottom: 2px solid #808080;
+    box-shadow: 3px 3px 15px rgba(0, 0, 0, 0.5);
+    padding: 6px;
+}
+
+/* Classe para esconder os pop-ups quando fechados */
+.escondida, .escondido {
+    display: none !important;
+}
+
+/* --- BOTÕES RETRO --- */
+.botao-retro, label.botao-retro, button {
     background: #c0c0c0;
     border-top: 2px solid #ffffff;
     border-left: 2px solid #ffffff;
@@ -38,24 +76,24 @@ body {
     border-bottom: 2px solid #808080;
     box-shadow: 1px 1px 0px 0px #000000;
     color: #000000;
-    padding: 6px 12px;
+    padding: 6px 10px;
     font-family: inherit;
     font-size: 12px;
     cursor: pointer;
     display: inline-block;
-    user-select: none;
     text-align: center;
+    margin: 2px;
 }
 
-.botao-retro:active, label.botao-retro:active {
+.botao-retro:active, button:active {
     border-top: 2px solid #808080;
     border-left: 2px solid #808080;
     border-right: 2px solid #ffffff;
     border-bottom: 2px solid #ffffff;
     box-shadow: none;
-    padding: 7px 11px 5px 13px;
 }
 
+/* --- INPUTS E RECIPIENTES DE TEXTO --- */
 input[type="text"], input[type="password"], select, textarea {
     background: #ffffff;
     border-top: 2px solid #808080;
@@ -68,67 +106,78 @@ input[type="text"], input[type="password"], select, textarea {
     font-size: 12px;
     outline: none;
     box-sizing: border-box;
+    margin-bottom: 6px;
 }
 
-video {
+/* --- PLAYER DE VÍDEO / MÍDIA --- */
+video, #player-mp4 {
+    width: 100%;
     background: #000000;
     border-top: 2px solid #808080;
     border-left: 2px solid #808080;
     border-right: 2px solid #ffffff;
     border-bottom: 2px solid #ffffff;
     display: block;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
+/* --- CHAT E MENSAGENS --- */
 #caixa-chat {
     background: #ffffff;
     border-top: 2px solid #808080;
     border-left: 2px solid #808080;
     border-right: 2px solid #ffffff;
     border-bottom: 2px solid #ffffff;
-    height: 180px;
+    height: 160px;
     overflow-y: auto;
-    padding: 8px;
+    padding: 6px;
     margin-bottom: 8px;
 }
 
 .mensagem {
-    margin: 0 0 6px 0;
-    font-size: 12px;
-    line-height: 14px;
+    background: #e0e0e0;
+    border-bottom: 1px solid #b5b5b5;
+    padding: 4px;
+    margin: 3px 0;
+    font-size: 11px;
+    line-height: 13px;
 }
 
 .sistema-aviso {
     background: #ffffcc;
-    border: 1px solid #808080;
+    border: 1px dotted #ff0000;
     padding: 4px;
-    margin: 6px 0;
+    margin: 4px 0;
     font-size: 11px;
     color: #ff0000;
+    font-weight: bold;
 }
 
+/* Linha de entrada do Chat */
 .chat-input-container {
     display: flex;
-    gap: 6px;
+    gap: 4px;
 }
 
 .chat-input-container input {
     flex: 1;
 }
 
-#lista-playlist {
+/* --- LISTAS (PLAYLIST E HISTÓRICO DE SALAS) --- */
+#lista-playlist, #lista-salas-historico {
     list-style: none;
     padding: 0;
     margin: 0;
+    max-height: 180px;
+    overflow-y: auto;
 }
 
-.item-musica {
+.item-musica, .item-sala-historico {
     background: #ffffff;
     border: 1px solid #808080;
     padding: 6px;
     margin-bottom: 4px;
     font-size: 12px;
-    cursor: pointer;
 }
 
 .item-musica:hover {
@@ -136,19 +185,10 @@ video {
     color: #ffffff;
 }
 
-.sala-controles input {
-    width: 100%;
-    margin-bottom: 8px;
-}
-
-.sala-controles button {
-    width: 100%;
-    margin-bottom: 4px;
-}
-
+/* --- DIVISORES RETRO --- */
 hr {
     border: none;
     border-top: 1px solid #808080;
     border-bottom: 1px solid #ffffff;
-    margin: 12px 0;
-        }
+    margin: 10px 0;
+    }
