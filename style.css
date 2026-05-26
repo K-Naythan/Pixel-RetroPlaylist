@@ -1,38 +1,154 @@
-.sala-controles input, .chat-input-container input {
-    width: 70%;
-    padding: 5px;
-    font-family: monospace;
-    border: 2px solid #808080;
+body {
+    background-color: #008080;
+    margin: 0;
+    padding: 15px;
+    font-family: "MS Sans Serif", Geneva, sans-serif;
+    color: #000000;
+    font-size: 13px;
 }
 
-#caixa-chat {
-    background: white;
-    border: 2px solid #808080;
-    height: 150px;
-    overflow-y: auto;
-    padding: 8px;
-    margin-bottom: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+.janela-windows {
+    background: #c0c0c0;
+    border-top: 2px solid #ffffff;
+    border-left: 2px solid #ffffff;
+    border-right: 2px solid #808080;
+    border-bottom: 2px solid #808080;
+    box-shadow: 1px 1px 0px 0px #000000;
+    padding: 4px;
+    margin-bottom: 15px;
 }
 
-.chat-input-container {
+.janela-windows h2 {
+    background: linear-gradient(90deg, #000080, #1084d0);
+    color: #ffffff;
+    margin: 0 0 10px 0;
+    padding: 4px 8px;
+    font-size: 13px;
+    font-weight: bold;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.mensagem {
+.botao-retro, label.botao-retro {
+    background: #c0c0c0;
+    border-top: 2px solid #ffffff;
+    border-left: 2px solid #ffffff;
+    border-right: 2px solid #808080;
+    border-bottom: 2px solid #808080;
+    box-shadow: 1px 1px 0px 0px #000000;
+    color: #000000;
+    padding: 6px 12px;
+    font-family: inherit;
     font-size: 12px;
-    margin: 2px 0;
+    cursor: pointer;
+    display: inline-block;
+    user-select: none;
+    text-align: center;
+}
+
+.botao-retro:active, label.botao-retro:active {
+    border-top: 2px solid #808080;
+    border-left: 2px solid #808080;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    box-shadow: none;
+    padding: 7px 11px 5px 13px;
+}
+
+input[type="text"], input[type="password"], select, textarea {
+    background: #ffffff;
+    border-top: 2px solid #808080;
+    border-left: 2px solid #808080;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    color: #000000;
+    padding: 5px;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+video {
+    background: #000000;
+    border-top: 2px solid #808080;
+    border-left: 2px solid #808080;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    display: block;
+    margin-bottom: 10px;
+}
+
+#caixa-chat {
+    background: #ffffff;
+    border-top: 2px solid #808080;
+    border-left: 2px solid #808080;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    height: 180px;
+    overflow-y: auto;
+    padding: 8px;
+    margin-bottom: 8px;
+}
+
+.mensagem {
+    margin: 0 0 6px 0;
+    font-size: 12px;
+    line-height: 14px;
 }
 
 .sistema-aviso {
-    color: #000080;
-    font-weight: bold;
+    background: #ffffcc;
+    border: 1px solid #808080;
+    padding: 4px;
+    margin: 6px 0;
     font-size: 11px;
-    background-color: #e0e0e0;
-    padding: 2px;
-    border-left: 3px solid #000080;
+    color: #ff0000;
 }
+
+.chat-input-container {
+    display: flex;
+    gap: 6px;
+}
+
+.chat-input-container input {
+    flex: 1;
+}
+
+#lista-playlist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.item-musica {
+    background: #ffffff;
+    border: 1px solid #808080;
+    padding: 6px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.item-musica:hover {
+    background: #000080;
+    color: #ffffff;
+}
+
+.sala-controles input {
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.sala-controles button {
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #808080;
+    border-bottom: 1px solid #ffffff;
+    margin: 12px 0;
+        }
