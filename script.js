@@ -285,22 +285,24 @@ btnEntrarSala.addEventListener('click', async () => {
             const dadosSala = snapshot.val();
             const participantes = dadosSala.participantes || {};
             
-            if (!participantes[nomeUsuarioLogado] && dadosSala.quantidadePessoas >= LIMITE_PESSOAS) {
-                alert("A playlist está cheia! Limite de 8 usuários atingido.");
-                return;
+            let novasPessoas = dadosSala.quantidadePessoas || 0;
+
+            if (!participantes[nomeUsuarioLogado]) {
+                if (novasPessoas >= LIMITE_PESSOAS) {
+                    alert("A playlist está cheia! Limite de 8 usuários atingido.");
+                    return;
+                }
+                participantes[nomeUsuarioLogado] = true;
+                novasPessoas = novasPessoas + 1;
             }
             
             salaAtual = entrada;
             codigoGeradoTxt.textContent = entrada;
-            
-            if (!participantes[nomeUsuarioLogado]) {
-                participantes[nomeUsuarioLogado] = true;
-                const novasPessoas = dadosSala.quantidadePessoas + 1;
-                await update(salaRef, { 
-                    quantidadePessoas: novasPessoas,
-                    participantes: participantes
-                });
-            }
+
+            await update(salaRef, { 
+                quantidadePessoas: novasPessoas,
+                participantes: participantes
+            });
             
             configurarPresencaOnDisconnect(entrada);
             conectarAoChatEPlaylist(entrada);
@@ -318,8 +320,24 @@ btnEntrarSala.addEventListener('click', async () => {
 });
 
 function configurarPresencaOnDisconnect(idSala) {
-    const participanteRef = ref(db, 'salas/' + idSala + '/participantes/' + nomeUsuarioLogado);
-    onDisconnect(participanteRef).remove();
+    const salaRef = ref(db, 'salas/' + idSala);
+    get(salaRef).then((snapshot) => {
+        if (snapshot.exists()) {
+            const dados = snapshot.val();
+            let futurasPessoas = (dados.quantidadePessoas || 1) - 1;
+            if (futurasPessoas < 0) futurasPessoas = 0;
+
+            const participantes = dados.participantes || {};
+            if (participantes[nomeUsuarioLogado]) {
+                delete participantes[nomeUsuarioLogado];
+            }
+
+            onDisconnect(salaRef).update({
+                quantidadePessoas: futurasPessoas,
+                participantes: participantes
+            });
+        }
+    });
 }
 
 function conectarAoChatEPlaylist(idSala) {
@@ -470,4 +488,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-    }
+        }
