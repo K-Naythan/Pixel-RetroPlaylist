@@ -120,20 +120,41 @@ function ouvirHistoricoSalas() {
             const salas = snapshot.val();
             Object.keys(salas).forEach(idSala => {
                 const sala = salas[idSala];
+                if (!sala) return;
+
                 const participantes = sala.participantes ? Object.keys(sala.participantes) : [];
-                
                 const pertenceASala = sala.criador === nomeUsuarioLogado || participantes.includes(nomeUsuarioLogado);
-                const salaAtiva = sala.quantidadePessoas > 0 && participantes.length > 0;
+                const salaAtiva = (sala.quantidadePessoas >= 0);
 
                 if (pertenceASala && salaAtiva) {
                     encontrouSalas = true;
                     const div = document.createElement('div');
                     div.classList.add('item-sala-historico');
-                    div.innerHTML = "<strong>Sala:</strong> " + idSala + "<br>" +
+                    div.style.position = "relative";
+                    div.style.marginBottom = "10px";
+                    
+                    let htmlBotaoEliminar = "";
+                    if (sala.criador === nomeUsuarioLogado) {
+                        htmlBotaoEliminar = "<button class='botao-retro btn-eliminar-sala-remota' data-sala='" + idSala + "' style='position: absolute; right: 5px; top: 5px; padding: 2px 6px; font-size: 10px; background: #c0c0c0; border: 1px solid #000; cursor: pointer;'>Eliminar</button>";
+                    }
+
+                    div.innerHTML = htmlBotaoEliminar +
+                                    "<strong>Sala:</strong> " + idSala + "<br>" +
                                     "<strong>Criador:</strong> " + sala.criador + "<br>" +
                                     "<strong>Usuários (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
+                    
                     listaSalasHistorico.appendChild(div);
                 }
+            });
+
+            const botoesEliminar = document.querySelectorAll('.btn-eliminar-sala-remota');
+            botoesEliminar.forEach(botao => {
+                botao.addEventListener('click', async (e) => {
+                    const idSalaParaDeletar = e.target.getAttribute('data-sala');
+                    if (confirm("Tens certeza que desejas eliminar a " + idSalaParaDeletar + " remotamente do servidor? Todas as playlists vinculadas a ela sumirão.")) {
+                        await eliminarSalaRemotamente(idSalaParaDeletar);
+                    }
+                });
             });
         }
 
@@ -141,6 +162,26 @@ function ouvirHistoricoSalas() {
             listaSalasHistorico.innerHTML = "<p style='font-size:12px;'>Não estás vinculado a nenhuma sala ativa no momento.</p>";
         }
     });
+}
+
+async function eliminarSalaRemotamente(idSala) {
+    try {
+        const salaRef = ref(db, 'salas/' + idSala);
+        await set(salaRef, null);
+        
+        if (salaAtual === idSala) {
+            salaAtual = null;
+            codigoGeradoTxt.textContent = "-";
+            listaPlaylist.innerHTML = '';
+            caixaChat.innerHTML = '';
+            playlistOrdenada = [];
+            alert("A sala em que estavas foi eliminada com sucesso!");
+        } else {
+            alert("A sala " + idSala + " foi removida com sucesso do banco de dados!");
+        }
+    } catch (e) {
+        alert("Erro ao tentar eliminar a sala remotamente.");
+    }
 }
 
 async function sairDaSalaAtual() {
@@ -160,19 +201,15 @@ async function sairDaSalaAtual() {
                 let novasPessoas = (dadosSala.quantidadePessoas || 1) - 1;
                 if (novasPessoas < 0) novasPessoas = 0;
 
-                if (novasPessoas === 0) {
-                    await set(salaRef, null);
-                } else {
-                    await update(salaRef, {
-                        quantidadePessoas: novasPessoas,
-                        participantes: participantes
-                    });
-                    
-                    push(ref(db, 'salas/' + salaAtual + '/chat'), {
-                        tipo: "sistema",
-                        texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " abandonou a sala."
-                    });
-                }
+                await update(salaRef, {
+                    quantidadePessoas: novasPessoas,
+                    participantes: participantes
+                });
+                
+                push(ref(db, 'salas/' + salaAtual + '/chat'), {
+                    tipo: "sistema",
+                    texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " abandonou a sala."
+                });
             }
         }
     } catch (e) {
@@ -433,4 +470,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-}
+    }
