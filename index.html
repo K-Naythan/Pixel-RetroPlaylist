@@ -6,6 +6,7 @@
     <title>Retro Playlist</title>
     <link rel="stylesheet" href="style.css">
     <style>
+        /* CSS Base Estrutural - Livre para estilização estética posterior */
         .modal-login {
             position: fixed;
             top: 0;
@@ -127,7 +128,7 @@
 
     <div id="painel-historico" class="janela-windows janela-flutuante escondida">
         <div class="barra-titulo-flutuante">
-            <span>Histórico de Salas</span>
+            <span>Histórico de Salas / Servidores</span>
             <button id="btn-fechar-historico" class="botao-fechar-painel">X</button>
         </div>
         <div class="corpo-flutuante" id="lista-salas-historico">
@@ -138,9 +139,16 @@
     <div class="janela-windows" style="margin-top: 15px;">
         <h2>Conectar Playlist</h2>
         <div class="sala-controles">
+            <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                <label for="select-tipo-sala" style="font-size: 12px; font-weight: bold;">Exibição:</label>
+                <select id="select-tipo-sala" style="background: #fff; border: 1px solid #000; font-size: 11px; padding: 2px;">
+                    <option value="privada">Privada (Apenas Código)</option>
+                    <option value="publica">Pública (Mural Global)</option>
+                </select>
+            </div>
             <button id="btn-criar-sala" class="botao-retro">Criar Código</button>
-            <p>Seu Código: <strong id="codigo-gerado">-</strong></p>
-            <hr>
+            <p style="margin-top: 8px;">Seu Código: <strong id="codigo-gerado">-</strong></p>
+            <hr style="margin: 10px 0;">
             <input type="text" id="input-codigo-convite" placeholder="Ex: SALA-1234 ou 1234">
             <button id="btn-entrar-sala" class="botao-retro">Entrar na Playlist</button>
         </div>
@@ -157,4 +165,4 @@
 
     <script type="module" src="script.js"></script>
 </body>
-    </html>
+                </html>
