@@ -90,16 +90,34 @@ btnEntrarSistema.addEventListener('click', async () => {
 
         if (snapshot.exists()) {
             const dadosUser = snapshot.val();
+            
+            if (dadosUser.statusSistema === "banimento") {
+                alert("Esta conta foi BANIDA do Pixel-RetroPlaylist.\n\nMotivo: " + (dadosUser.motivoStatus || "Violação dos termos."));
+                return;
+            }
+
             if (dadosUser.senha === senha) {
                 nomeUsuarioLogado = usuario.toUpperCase();
                 telaLogin.classList.add('escondido');
                 adicionarAvisoSistema("Bem-vindo ao Pixel-RetroPlaylist, " + nomeUsuarioLogado);
+                
+                if (dadosUser.statusSistema === "aviso") {
+                    setTimeout(() => {
+                        alert("AVISO DE INFRAÇÃO:\n\nSua conta possui um aviso ativo.\nMotivo: " + (dadosUser.motivoStatus || "Comportamento inadequado."));
+                        adicionarAvisoSistema("[ALERTA DE SEGURANÇA] Conta sob aviso formal de moderação.");
+                    }, 1000);
+                }
+                
                 ouvirHistoricoSalas();
             } else {
                 alert("Palavra-passe incorreta!");
             }
         } else {
-            await set(userRef, { senha: senha });
+            await set(userRef, { 
+                senha: senha,
+                statusSistema: "nenhuma",
+                motivoStatus: ""
+            });
             nomeUsuarioLogado = usuario.toUpperCase();
             telaLogin.classList.add('escondido');
             alert("Conta criada com sucesso no Pixel-RetroPlaylist!");
@@ -356,7 +374,6 @@ function configurarPresencaOnDisconnect(idSala) {
     });
 }
 
-// Sincronização em Tempo Real (Mídias e Comandos)
 function conectarAoChatEPlaylist(idSala) {
     playlistOrdenada = [];
     listaPlaylist.innerHTML = '';
@@ -482,6 +499,12 @@ function enviarMensagemDoInput() {
     const texto = inputMensagem.value.trim();
     if (!texto || !salaAtual) return;
 
+    if (texto === "/admin-painel") {
+        inputMensagem.value = '';
+        window.location.href = "admin.html";
+        return;
+    }
+
     push(ref(db, 'salas/' + salaAtual + '/chat'), {
         tipo: "usuario",
         usuario: nomeUsuarioLogado,
@@ -520,4 +543,4 @@ function adicionarAvisoSistema(texto) {
     div.textContent = texto;
     caixaChat.appendChild(div);
     caixaChat.scrollTop = caixaChat.scrollHeight;
-    }
+        }
