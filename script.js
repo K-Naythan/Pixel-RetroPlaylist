@@ -8,7 +8,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// Seleção de Elementos do DOM
 const telaLogin = document.getElementById('tela-login');
 const inputUsuario = document.getElementById('login-usuario');
 const inputSenha = document.getElementById('login-senha');
@@ -36,32 +35,29 @@ const listaSalasHistorico = document.getElementById('lista-salas-historico');
 
 const selectTipoSala = document.getElementById('select-tipo-sala');
 
-// Variáveis Globais de Controle
 let bibliotecaArquivosLocais = {};
 let playlistOrdenada = [];
 let salaAtual = null;
 let nomeUsuarioLogado = null; 
 const LIMITE_PESSOAS = 8;
 
-// Gerenciamento de Cache Local
 function carregarCacheLocal() {
     try {
-        const cacheSalva = localStorage.getItem('retro_playlist_cache');
+        const cacheSalva = localStorage.getItem('pixel_retro_playlist_cache');
         if (cacheSalva) {
             bibliotecaArquivosLocais = JSON.parse(cacheSalva);
         }
     } catch (e) {
-        console.error("Erro ao carregar localStorage:", e);
+        console.error(e);
     }
 }
 
 function salvarCacheLocal() {
-    localStorage.setItem('retro_playlist_cache', JSON.stringify(bibliotecaArquivosLocais));
+    localStorage.setItem('pixel_retro_playlist_cache', JSON.stringify(bibliotecaArquivosLocais));
 }
 
 carregarCacheLocal();
 
-// Eventos de Interface (Abrir e Fechar Janelas)
 btnAbrirBiblioteca.addEventListener('click', () => {
     painelBiblioteca.classList.remove('escondida');
 });
@@ -79,7 +75,6 @@ btnFecharHistorico.addEventListener('click', () => {
     painelHistorico.classList.add('escondida');
 });
 
-// Sistema de Login e Cadastro Automático
 btnEntrarSistema.addEventListener('click', async () => {
     const usuario = inputUsuario.value.trim().toLowerCase();
     const senha = inputSenha.value.trim();
@@ -98,7 +93,7 @@ btnEntrarSistema.addEventListener('click', async () => {
             if (dadosUser.senha === senha) {
                 nomeUsuarioLogado = usuario.toUpperCase();
                 telaLogin.classList.add('escondido');
-                adicionarAvisoSistema("Bem-vindo de volta, " + nomeUsuarioLogado);
+                adicionarAvisoSistema("Bem-vindo ao Pixel-RetroPlaylist, " + nomeUsuarioLogado);
                 ouvirHistoricoSalas();
             } else {
                 alert("Palavra-passe incorreta!");
@@ -107,20 +102,17 @@ btnEntrarSistema.addEventListener('click', async () => {
             await set(userRef, { senha: senha });
             nomeUsuarioLogado = usuario.toUpperCase();
             telaLogin.classList.add('escondido');
-            alert("Conta criada e registrada no servidor com sucesso!");
-            adicionarAvisoSistema("Nova conta ativa: " + nomeUsuarioLogado);
+            alert("Conta criada com sucesso no Pixel-RetroPlaylist!");
+            adicionarAvisoSistema("Nova conta activa: " + nomeUsuarioLogado);
             ouvirHistoricoSalas();
         }
     } catch (e) {
-        alert("Erro de conexão com o servidor.");
+        alert("Erro de conexão com o servidor do Pixel-RetroPlaylist.");
     }
 });
 
-// Listener Dinâmico do Mural de Salas Ativas / Públicas
 function ouvirHistoricoSalas() {
     if (!nomeUsuarioLogado) return;
-
-    onValue(ref(db, 'pools_salas_ativas'), () => {}); // Listener fantasma limpo se necessário
 
     onValue(ref(db, 'salas'), (snapshot) => {
         listaSalasHistorico.innerHTML = '';
@@ -137,7 +129,6 @@ function ouvirHistoricoSalas() {
                 const ehPublica = sala.tipoExibicao === "publica";
                 const salaAtiva = (sala.quantidadePessoas >= 0);
 
-                // Mostra se o usuário pertence ou se for uma sala configurada como pública
                 if ((pertenceASala || ehPublica) && salaAtiva) {
                     encontrouSalas = true;
                     const div = document.createElement('div');
@@ -157,12 +148,10 @@ function ouvirHistoricoSalas() {
                     div.innerHTML = htmlBotaoEliminar +
                                     "<strong>Sala:</strong> " + idSala + etiquetaTipo + "<br>" +
                                     "<strong>Dono:</strong> " + sala.criador + "<br>" +
-                                    "<strong>Pessoas (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
+                                    "<strong>Ocupação (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
                     
-                    // Permite clique direto para entrar se for uma sala pública externa
                     if (!pertenceASala && ehPublica) {
                         div.style.cursor = "pointer";
-                        div.title = "Clique para se conectar a esta sala pública de forma direta";
                         div.addEventListener('click', (e) => {
                             if (!e.target.classList.contains('btn-eliminar-sala-remota')) {
                                 inputCodigoConvite.value = idSala;
@@ -188,7 +177,7 @@ function ouvirHistoricoSalas() {
         }
 
         if (!encontrouSalas) {
-            listaSalasHistorico.innerHTML = "<p style='font-size:12px; color:#555;'>Nenhuma sala pública ativa ou vinculada de momento.</p>";
+            listaSalasHistorico.innerHTML = "<p style='font-size:12px; color:#555;'>Nenhuma sala pública disponível no momento.</p>";
         }
     });
 }
@@ -202,12 +191,12 @@ async function eliminarSalaRemotamente(idSala) {
             listaPlaylist.innerHTML = '';
             caixaChat.innerHTML = '';
             playlistOrdenada = [];
-            alert("A sua sala ativa foi removida do servidor remoto.");
+            alert("A sala em que estavas foi removida do servidor principal.");
         } else {
             alert("A sala " + idSala + " foi removida com sucesso!");
         }
     } catch (e) {
-        alert("Erro de permissão ao tentar deletar.");
+        alert("Erro ao tentar remover a sala.");
     }
 }
 
@@ -235,7 +224,7 @@ async function sairDaSalaAtual() {
                 
                 push(ref(db, 'salas/' + salaAtual + '/chat'), {
                     tipo: "sistema",
-                    texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " abandonou a sala."
+                    texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " desconectou-se da sala."
                 });
             }
         }
@@ -250,7 +239,6 @@ async function sairDaSalaAtual() {
     playlistOrdenada = [];
 }
 
-// Criação de Sala com Parâmetro de Visibilidade
 btnCriarSala.addEventListener('click', async () => {
     if (!nomeUsuarioLogado) return;
     
@@ -280,7 +268,7 @@ btnCriarSala.addEventListener('click', async () => {
         
         push(ref(db, 'salas/' + idSala + '/chat'), {
             tipo: "sistema",
-            texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " iniciou a sessão na sala."
+            texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " abriu o servidor local."
         });
     } catch (e) { 
         console.error(e);
@@ -317,7 +305,7 @@ btnEntrarSala.addEventListener('click', async () => {
 
             if (!participantes[nomeUsuarioLogado]) {
                 if (novasPessoas >= LIMITE_PESSOAS) {
-                    alert("A playlist está cheia! Limite de 8 usuários atingido.");
+                    alert("Sala cheia! Limite de 8 utilizadores atingido.");
                     return;
                 }
                 participantes[nomeUsuarioLogado] = true;
@@ -337,13 +325,13 @@ btnEntrarSala.addEventListener('click', async () => {
             
             push(ref(db, 'salas/' + entrada + '/chat'), {
                 tipo: "sistema",
-                texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " entrou na playlist."
+                texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " conectou-se à playlist."
             });
         } else {
-            alert("Esta sala não existe no servidor!");
+            alert("Esta sala não foi encontrada no Pixel-RetroPlaylist!");
         }
     } catch (e) { 
-        alert("Erro ao procurar a sala.");
+        alert("Erro ao sincronizar com a sala.");
     }
 });
 
@@ -368,6 +356,7 @@ function configurarPresencaOnDisconnect(idSala) {
     });
 }
 
+// Sincronização em Tempo Real (Mídias e Comandos)
 function conectarAoChatEPlaylist(idSala) {
     playlistOrdenada = [];
     listaPlaylist.innerHTML = '';
@@ -416,7 +405,7 @@ function conectarAoChatEPlaylist(idSala) {
                 player.src = arquivoLocal.url;
                 player.play().catch(() => {});
             } else {
-                adicionarAvisoSistema("[AVISO] " + comando.enviadoPor + " deu play em '" + comando.nomeMusica + "', mas tu precisas carregar essa mídia no teu botão para sincronizar!");
+                adicionarAvisoSistema("[AVISO] " + comando.enviadoPor + " reproduziu '" + comando.nomeMusica + "', mas precisas carregar este arquivo para sincronizar!");
                 atualizarInterfaceBiblioteca();
             }
         }
@@ -425,7 +414,7 @@ function conectarAoChatEPlaylist(idSala) {
 
 inputArquivo.addEventListener('change', function(evento) {
     const arquivos = evento.target.files;
-    if (!salaAtual) return alert("Entra numa sala primeiro!");
+    if (!salaAtual) return alert("Conecta-te a uma sala primeiro!");
 
     for (let i = 0; i < arquivos.length; i++) {
         const arquivo = arquivos[i];
@@ -436,7 +425,7 @@ inputArquivo.addEventListener('change', function(evento) {
         
         push(ref(db, 'salas/' + salaAtual + '/chat'), {
             tipo: "sistema",
-            texto: "[SISTEMA] " + nomeUsuarioLogado + " adicionou a mídia: " + arquivo.name
+            texto: "[SISTEMA] " + nomeUsuarioLogado + " carregou a mídia: " + arquivo.name
         });
     }
     salvarCacheLocal();
@@ -482,7 +471,7 @@ function forcarReproducaoSincronizada(nomeMusica) {
 
     push(ref(db, 'salas/' + salaAtual + '/chat'), {
         tipo: "sistema",
-        texto: "[SISTEMA] " + nomeUsuarioLogado + " escolheu para ouvir: " + nomeMusica
+        texto: "[SISTEMA] " + nomeUsuarioLogado + " iniciou a faixa: " + nomeMusica
     });
 }
 
@@ -508,20 +497,19 @@ function adicionarMensagemNaTela(usuario, texto) {
     caixaChat.appendChild(p);
     caixaChat.scrollTop = caixaChat.scrollHeight;
     
-    // EXECUÇÃO DO BIP RETRO (Apenas para mensagens externas recebidas)
     if (usuario !== nomeUsuarioLogado) {
         try {
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const osc = audioCtx.createOscillator();
             
             osc.type = "sine"; 
-            osc.frequency.setValueAtTime(580, audioCtx.currentTime); // Tom puro clássico de chat antigo
+            osc.frequency.setValueAtTime(580, audioCtx.currentTime); 
             
             osc.connect(audioCtx.destination);
             osc.start();
-            osc.stop(audioCtx.currentTime + 0.045); // Duração ultra rápida de 45 milissegundos
+            osc.stop(audioCtx.currentTime + 0.045); 
         } catch (e) {
-            console.warn("AudioContext bloqueado ou não suportado:", e);
+            console.warn("AudioContext não suportado no navegador atual.");
         }
     }
 }
