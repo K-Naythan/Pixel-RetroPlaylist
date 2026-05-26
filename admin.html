@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel-RetroPlaylist — Painel de Administração</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            background: #008080;
+            padding: 20px;
+            font-family: monospace;
+        }
+        .janela-admin {
+            width: 100%;
+            max-width: 600px;
+            background: #c0c0c0;
+            border: 2px solid #fff;
+            box-shadow: 3px 3px 15px rgba(0,0,0,0.5);
+            margin: 0 auto 20px auto;
+        }
+        .barra-titulo-admin {
+            background: #800000;
+            color: white;
+            padding: 6px 10px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .conteudo-admin {
+            padding: 15px;
+        }
+        .campo-admin {
+            margin-bottom: 12px;
+        }
+        .campo-admin label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 4px;
+            font-size: 12px;
+        }
+        .campo-admin input, .campo-admin select, .campo-admin textarea {
+            width: 100%;
+            padding: 6px;
+            font-family: inherit;
+            box-sizing: border-box;
+            border: 2px solid #808080;
+        }
+        .lista-painel {
+            background: #fff;
+            border: 2px solid #808080;
+            height: 150px;
+            overflow-y: auto;
+            padding: 5px;
+            list-style: none;
+            margin: 0;
+        }
+        .item-utilizador-lista {
+            padding: 6px;
+            border-bottom: 1px dashed #c0c0c0;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .item-utilizador-lista:hover {
+            background: #000080;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="janela-admin">
+        <div class="barra-titulo-admin">
+            <span>Pixel-RetroPlaylist Control Panel v1.0</span>
+        </div>
+        <div class="conteudo-admin">
+            <h2>Base de Dados de Utilizadores</h2>
+            <p style="font-size: 11px; margin-bottom: 8px;">Clique num utilizador da lista para carregar os dados dele no formulário de moderação:</p>
+            <ul id="lista-usuarios-admin" class="lista-painel"></ul>
+        </div>
+    </div>
+
+    <div class="janela-admin">
+        <div class="barra-titulo-admin">
+            <span>Ações de Moderação / Infrações</span>
+        </div>
+        <div class="conteudo-admin">
+            <div class="campo-admin">
+                <label>Utilizador Alvo:</label>
+                <input type="text" id="admin-usuario-alvo" readonly style="background: #e0e0e0;">
+            </div>
+
+            <div class="campo-admin">
+                <label>Ação Corretiva:</label>
+                <select id="admin-acao-tipo">
+                    <option value="nenhuma">Nenhuma (Conta Regular)</option>
+                    <option value="aviso">Aplicar Aviso Formal</option>
+                    <option value="banimento">Aplicar Banimento Definitivo</option>
+                </select>
+            </div>
+
+            <div class="campo-admin">
+                <label>Motivo / Violação dos Termos:</label>
+                <textarea id="admin-motivo-texto" rows="3" placeholder="Explique detalhadamente qual regra ou termo foi violado para que o utilizador saiba o porquê..."></textarea>
+            </div>
+
+            <button id="btn-aplicar-punicao" class="botao-retro" style="width: 100%; padding: 10px; font-weight: bold;">Aplicar Alterações no Servidor</button>
+        </div>
+    </div>
+
+    <script type="module" src="admin.js"></script>
+</body>
+  </html>
