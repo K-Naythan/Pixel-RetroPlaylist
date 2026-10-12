@@ -21,6 +21,8 @@ const telaLogin = document.getElementById('tela-login');
 const telaTermos = document.getElementById('tela-termos');
 const btnAceitarTermos = document.getElementById('btn-aceitar-termos');
 
+const formAutenticacao = document.getElementById('form-autenticacao');
+const authFeedback = document.getElementById('auth-feedback');
 const btnAbaLogin = document.getElementById('btn-aba-login');
 const btnAbaRegistro = document.getElementById('btn-aba-registro');
 const containerEmail = document.getElementById('container-email');
@@ -87,39 +89,85 @@ btnAbrirHistorico.addEventListener('click', () => {
 btnFecharHistorico.addEventListener('click', () => { painelHistorico.classList.add('escondida'); });
 
 btnAbaLogin.addEventListener('click', () => {
-    modoAtual = "login";
-    btnAbaLogin.style.background = "#e0e0e0";
-    btnAbaLogin.style.fontWeight = "bold";
-    btnAbaRegistro.style.background = "#c0c0c0";
-    btnAbaRegistro.style.fontWeight = "normal";
-    containerEmail.classList.add('escondido');
-    btnEntrarSistema.textContent = "Entrar no Sistema";
+    definirModoAutenticacao("login");
 });
 
 btnAbaRegistro.addEventListener('click', () => {
-    modoAtual = "registro";
-    btnAbaRegistro.style.background = "#e0e0e0";
-    btnAbaRegistro.style.fontWeight = "bold";
-    btnAbaLogin.style.background = "#c0c0c0";
-    btnAbaLogin.style.fontWeight = "normal";
-    containerEmail.classList.remove('escondido');
-    btnEntrarSistema.textContent = "Criar Conta Segura";
+    definirModoAutenticacao("registro");
 });
 
-btnEntrarSistema.addEventListener('click', async () => {
+function definirModoAutenticacao(modo) {
+    modoAtual = modo;
+    const estaARegistar = modo === "registro";
+
+    btnAbaLogin.setAttribute('aria-pressed', String(!estaARegistar));
+    btnAbaRegistro.setAttribute('aria-pressed', String(estaARegistar));
+    btnAbaLogin.style.background = estaARegistar ? "#c0c0c0" : "#e0e0e0";
+    btnAbaRegistro.style.background = estaARegistar ? "#e0e0e0" : "#c0c0c0";
+    btnAbaLogin.style.fontWeight = estaARegistar ? "normal" : "bold";
+    btnAbaRegistro.style.fontWeight = estaARegistar ? "bold" : "normal";
+    containerEmail.classList.toggle('escondido', !estaARegistar);
+    inputEmail.disabled = !estaARegistar;
+    inputEmail.required = estaARegistar;
+    inputSenha.autocomplete = estaARegistar ? "new-password" : "current-password";
+    inputSenha.minLength = estaARegistar ? 6 : -1;
+    btnEntrarSistema.textContent = estaARegistar ? "Criar conta" : "Iniciar sessão";
+    limparMensagemAutenticacao();
+}
+
+function mostrarMensagemAutenticacao(mensagem, tipo = "erro") {
+    authFeedback.textContent = mensagem;
+    authFeedback.dataset.tipo = tipo;
+    authFeedback.hidden = false;
+}
+
+function limparMensagemAutenticacao() {
+    authFeedback.textContent = "";
+    authFeedback.hidden = true;
+    delete authFeedback.dataset.tipo;
+}
+
+function traduzirErroAutenticacao(erro) {
+    if (erro.code && erro.code.toLowerCase().includes('api-key')) {
+        return "A configuração web de autenticação Firebase está incompleta. É necessário completar a configuração da aplicação Firebase.";
+    }
+    const mensagens = {
+        "auth/invalid-api-key": "A autenticação Firebase ainda não está configurada por completo. É necessário completar a configuração da aplicação Firebase.",
+        "auth/operation-not-allowed": "Este método de entrada ainda não está ativado no Firebase.",
+        "auth/invalid-credential": "Os dados de acesso não estão corretos. Confirma o nome de utilizador e a palavra-passe.",
+        "auth/invalid-email": "Introduz um endereço de e-mail válido.",
+        "auth/email-already-in-use": "Este e-mail já está associado a uma conta.",
+        "auth/weak-password": "A palavra-passe deve ter pelo menos 6 caracteres.",
+        "auth/network-request-failed": "Não foi possível ligar ao serviço de autenticação. Verifica a ligação à Internet e tenta novamente.",
+        "auth/unauthorized-domain": "Este domínio ainda não está autorizado nas definições de autenticação do Firebase.",
+        "auth/popup-blocked": "O navegador bloqueou a janela de acesso Google. Permite janelas de pop-up e tenta novamente.",
+        "auth/popup-closed-by-user": "O acesso Google foi fechado antes de terminar.",
+        "auth/too-many-requests": "Foram feitas demasiadas tentativas. Aguarda um pouco antes de tentares novamente.",
+        "PERMISSION_DENIED": "O Firebase recusou o acesso. Verifica as regras de acesso da base de dados."
+    };
+    return mensagens[erro.code] || "Não foi possível concluir a autenticação. Tenta novamente ou confirma a configuração do Firebase.";
+}
+
+formAutenticacao.addEventListener('submit', async (evento) => {
+    evento.preventDefault();
     const usuario = inputUsuario.value.trim().toLowerCase();
     const senha = inputSenha.value.trim();
     const email = inputEmail.value.trim();
 
     if (!usuario || !senha) {
-        alert("Insira o usuário e a palavra-passe!");
+        mostrarMensagemAutenticacao("Preenche o nome de utilizador e a palavra-passe.");
         return;
     }
 
     if (modoAtual === "registro" && !email) {
-        alert("É necessário inserir um e-mail válido para efetuar o registro!");
+        mostrarMensagemAutenticacao("Introduz um endereço de e-mail válido para criares a conta.");
         return;
     }
+
+    btnEntrarSistema.disabled = true;
+    btnGoogleLogin.disabled = true;
+    btnEntrarSistema.textContent = modoAtual === "registro" ? "A criar conta…" : "A iniciar sessão…";
+    limparMensagemAutenticacao();
 
     try {
         const userRef = ref(db, 'usuarios/' + usuario);
@@ -130,14 +178,14 @@ btnEntrarSistema.addEventListener('click', async () => {
                 const dadosUser = snapshot.val();
                 
                 if (dadosUser.statusSistema === "banimento") {
-                    alert("Esta conta foi BANIDA do Pixel-RetroPlaylist.\n\nMotivo: " + (dadosUser.motivoStatus || "Violação dos termos."));
+                    mostrarMensagemAutenticacao("Esta conta foi suspensa. Motivo: " + (dadosUser.motivoStatus || "Violação dos termos de utilização."));
                     return;
                 }
 
                 if (dadosUser.email) {
                     await signInWithEmailAndPassword(auth, dadosUser.email, senha);
                 } else if (dadosUser.senha !== senha) {
-                    alert("Palavra-passe incorreta!");
+                    mostrarMensagemAutenticacao("A palavra-passe não está correta.");
                     return;
                 }
 
@@ -146,11 +194,11 @@ btnEntrarSistema.addEventListener('click', async () => {
                 
                 chamarFluxoTermos(dadosUser);
             } else {
-                alert("Esta conta não existe! Altere para a aba 'Registar' para criá-la.");
+                mostrarMensagemAutenticacao("Não encontrámos esta conta. Seleciona «Criar conta» para te registares.");
             }
         } else {
             if (snapshot.exists()) {
-                alert("Este nome de usuário já está sendo utilizado por outra pessoa.");
+                mostrarMensagemAutenticacao("Este nome de utilizador já está a ser utilizado. Escolhe outro.");
                 return;
             }
 
@@ -165,16 +213,25 @@ btnEntrarSistema.addEventListener('click', async () => {
 
             nomeUsuarioLogado = usuario.toUpperCase();
             telaLogin.classList.add('escondido');
-            alert("Conta criada com sucesso!");
+            mostrarMensagemAutenticacao("Conta criada com sucesso.", "sucesso");
             
             chamarFluxoTermos({ statusSistema: "nenhuma" });
         }
     } catch (e) {
-        alert("Erro na autenticação: " + e.message);
+        console.error("Erro na autenticação:", e);
+        mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
+    } finally {
+        btnEntrarSistema.disabled = false;
+        btnGoogleLogin.disabled = false;
+        btnEntrarSistema.textContent = modoAtual === "registro" ? "Criar conta" : "Iniciar sessão";
     }
 });
 
 btnGoogleLogin.addEventListener('click', async () => {
+    limparMensagemAutenticacao();
+    btnGoogleLogin.disabled = true;
+    btnEntrarSistema.disabled = true;
+    mostrarMensagemAutenticacao("A abrir o acesso Google…", "informacao");
     try {
         const resultado = await signInWithPopup(auth, provedorGoogle);
         const usuarioFirebase = resultado.user;
@@ -186,7 +243,7 @@ btnGoogleLogin.addEventListener('click', async () => {
         const snapshot = await get(userRef);
         
         if (snapshot.exists() && snapshot.val().statusSistema === "banimento") {
-            alert("Este provedor Google encontra-se BANIDO do sistema.");
+            mostrarMensagemAutenticacao("Esta conta Google foi suspensa do sistema.");
             return;
         }
 
@@ -207,7 +264,11 @@ btnGoogleLogin.addEventListener('click', async () => {
         
         chamarFluxoTermos(dadosUsuarioSalvar);
     } catch (e) {
-        alert("Falha ao autenticar com o provedor Google: " + e.message);
+        console.error("Erro no acesso Google:", e);
+        mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
+    } finally {
+        btnGoogleLogin.disabled = false;
+        btnEntrarSistema.disabled = false;
     }
 });
 

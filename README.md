@@ -23,3 +23,13 @@ Ambiente de Desenvolvimento: Programado e testado via Termux e Acode diretamente
 Backend & DB: Firebase (Auth & Realtime Database).
 
 Hosting: GitHub Pages com domínio customizado via js.org.
+
+## Executar no Replit
+
+A aplicação é estática e não necessita de instalação de dependências. O servidor de desenvolvimento serve os ficheiros na porta 5000:
+
+```bash
+python3 -m http.server 5000 --bind 0.0.0.0
+```
+
+O acesso por e-mail e palavra-passe e o acesso Google dependem da configuração da aplicação Firebase. A autenticação no código ainda precisa da configuração web completa do Firebase; sem ela, não é possível criar contas novas nem iniciar sessão através desses métodos. A base de dados e as respetivas regras continuam a ser geridas no Firebase.
