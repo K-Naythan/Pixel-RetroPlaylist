@@ -34,6 +34,7 @@ const formAutenticacao = document.getElementById('form-autenticacao');
 const authFeedback = document.getElementById('auth-feedback');
 const btnAbaLogin = document.getElementById('btn-aba-login');
 const btnAbaRegistro = document.getElementById('btn-aba-registro');
+const containerUsuario = document.getElementById('container-usuario');
 const containerEmail = document.getElementById('container-email');
 const inputEmail = document.getElementById('login-email');
 
@@ -115,9 +116,12 @@ function definirModoAutenticacao(modo) {
     btnAbaRegistro.style.background = estaARegistar ? "#e0e0e0" : "#c0c0c0";
     btnAbaLogin.style.fontWeight = estaARegistar ? "normal" : "bold";
     btnAbaRegistro.style.fontWeight = estaARegistar ? "bold" : "normal";
-    containerEmail.classList.toggle('escondido', !estaARegistar);
-    inputEmail.disabled = !estaARegistar;
-    inputEmail.required = estaARegistar;
+    
+    // Mostra o nome de utilizador apenas ao criar conta
+    containerUsuario.classList.toggle('escondido', !estaARegistar);
+    inputUsuario.required = estaARegistar;
+
+    inputEmail.required = true;
     inputSenha.autocomplete = estaARegistar ? "new-password" : "current-password";
     inputSenha.minLength = estaARegistar ? 6 : -1;
     btnEntrarSistema.textContent = estaARegistar ? "Criar conta" : "Iniciar sessão";
@@ -137,39 +141,37 @@ function limparMensagemAutenticacao() {
 }
 
 function traduzirErroAutenticacao(erro) {
-    if (erro.code && erro.code.toLowerCase().includes('api-key')) {
-        return "A configuração web de autenticação Firebase está incompleta. É necessário completar a configuração da aplicação Firebase.";
-    }
     const mensagens = {
-        "auth/invalid-api-key": "A autenticação Firebase ainda não está configurada por completo. É necessário completar a configuração da aplicação Firebase.",
+        "auth/invalid-api-key": "A autenticação Firebase ainda não está configurada por completo.",
         "auth/operation-not-allowed": "Este método de entrada ainda não está ativado no Firebase.",
-        "auth/invalid-credential": "Os dados de acesso não estão corretos. Confirma o nome de utilizador e a palavra-passe.",
+        "auth/invalid-credential": "Os dados de acesso não estão corretos. Confirma o e-mail e a palavra-passe.",
         "auth/invalid-email": "Introduz um endereço de e-mail válido.",
         "auth/email-already-in-use": "Este e-mail já está associado a uma conta.",
         "auth/weak-password": "A palavra-passe deve ter pelo menos 6 caracteres.",
-        "auth/network-request-failed": "Não foi possível ligar ao serviço de autenticação. Verifica a ligação à Internet e tenta novamente.",
-        "auth/unauthorized-domain": "Este domínio ainda não está autorizado nas definições de autenticação do Firebase.",
-        "auth/popup-blocked": "O navegador bloqueou a janela de acesso Google. Permite janelas de pop-up e tenta novamente.",
+        "auth/user-not-found": "Não encontrámos nenhuma conta com este e-mail.",
+        "auth/wrong-password": "A palavra-passe está incorreta.",
+        "auth/network-request-failed": "Não foi possível ligar ao serviço de autenticação. Verifica a ligação à Internet.",
+        "auth/unauthorized-domain": "Este domínio ainda não está autorizado nas definições do Firebase.",
+        "auth/popup-blocked": "O navegador bloqueou a janela de acesso Google.",
         "auth/popup-closed-by-user": "O acesso Google foi fechado antes de terminar.",
-        "auth/too-many-requests": "Foram feitas demasiadas tentativas. Aguarda um pouco antes de tentares novamente.",
-        "PERMISSION_DENIED": "O Firebase recusou o acesso. Verifica as regras de acesso da base de dados."
+        "auth/too-many-requests": "Foram feitas demasiadas tentativas. Aguarda um pouco."
     };
-    return mensagens[erro.code] || "Não foi possível concluir a autenticação. Tenta novamente ou confirma a configuração do Firebase.";
+    return mensagens[erro.code] || "Não foi possível concluir a autenticação. Tenta novamente.";
 }
 
 formAutenticacao.addEventListener('submit', async (evento) => {
     evento.preventDefault();
-    const usuario = inputUsuario.value.trim().toLowerCase();
-    const senha = inputSenha.value.trim();
     const email = inputEmail.value.trim();
+    const senha = inputSenha.value.trim();
+    const usuario = inputUsuario.value.trim().toLowerCase();
 
-    if (!usuario || !senha) {
-        mostrarMensagemAutenticacao("Preenche o nome de utilizador e a palavra-passe.");
+    if (!email || !senha) {
+        mostrarMensagemAutenticacao("Preenche o e-mail e a palavra-passe.");
         return;
     }
 
-    if (modoAtual === "registro" && !email) {
-        mostrarMensagemAutenticacao("Introduz um endereço de e-mail válido para criares a conta.");
+    if (modoAtual === "registro" && !usuario) {
+        mostrarMensagemAutenticacao("Preenche o nome de utilizador para criares a conta.");
         return;
     }
 
@@ -179,33 +181,36 @@ formAutenticacao.addEventListener('submit', async (evento) => {
     limparMensagemAutenticacao();
 
     try {
-        const userRef = ref(db, 'usuarios/' + usuario);
-        const snapshot = await get(userRef);
-
         if (modoAtual === "login") {
+            // Iniciar sessão diretamente com Firebase Auth (E-mail e Palavra-passe)
+            const credencial = await signInWithEmailAndPassword(auth, email, senha);
+            const uid = credencial.user.uid;
+
+            // Procurar nome de utilizador associado na base de dados
+            const snapshot = await get(ref(db, 'usuarios'));
+            let nomeEncontrado = null;
+
             if (snapshot.exists()) {
-                const dadosUser = snapshot.val();
-                
-                if (dadosUser.statusSistema === "banimento") {
-                    mostrarMensagemAutenticacao("Esta conta foi suspensa. Motivo: " + (dadosUser.motivoStatus || "Violação dos termos de utilização."));
-                    return;
-                }
-
-                if (dadosUser.email) {
-                    await signInWithEmailAndPassword(auth, dadosUser.email, senha);
-                } else if (dadosUser.senha !== senha) {
-                    mostrarMensagemAutenticacao("A palavra-passe não está correta.");
-                    return;
-                }
-
-                nomeUsuarioLogado = usuario.toUpperCase();
-                telaLogin.classList.add('escondido');
-                
-                chamarFluxoTermos(dadosUser);
-            } else {
-                mostrarMensagemAutenticacao("Não encontrámos esta conta. Seleciona «Criar conta» para te registares.");
+                const todosUsuarios = snapshot.val();
+                Object.keys(todosUsuarios).forEach(nome => {
+                    if (todosUsuarios[nome].uid === uid || todosUsuarios[nome].email === email) {
+                        nomeEncontrado = nome;
+                        if (todosUsuarios[nome].statusSistema === "banimento") {
+                            throw { code: "auth/banned", message: todosUsuarios[nome].motivoStatus };
+                        }
+                    }
+                });
             }
+
+            nomeUsuarioLogado = nomeEncontrado ? nomeEncontrado.toUpperCase() : email.split('@')[0].toUpperCase();
+            telaLogin.classList.add('escondido');
+            chamarFluxoTermos({ statusSistema: "nenhuma" });
+
         } else {
+            // Criar nova conta
+            const userRef = ref(db, 'usuarios/' + usuario);
+            const snapshot = await get(userRef);
+
             if (snapshot.exists()) {
                 mostrarMensagemAutenticacao("Este nome de utilizador já está a ser utilizado. Escolhe outro.");
                 return;
@@ -228,7 +233,11 @@ formAutenticacao.addEventListener('submit', async (evento) => {
         }
     } catch (e) {
         console.error("Erro na autenticação:", e);
-        mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
+        if (e.code === "auth/banned") {
+            mostrarMensagemAutenticacao("Esta conta foi suspensa. Motivo: " + (e.message || "Violação dos termos."));
+        } else {
+            mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
+        }
     } finally {
         btnEntrarSistema.disabled = false;
         btnGoogleLogin.disabled = false;
@@ -483,7 +492,4 @@ btnEntrarSala.addEventListener('click', async () => {
 
     try {
         const salaRef = ref(db, 'salas/' + entrada);
-        const snapshot = await get(salaRef);
-        
-        if (snapshot.exists()) {
-            const dadosSala = sn
+        c
