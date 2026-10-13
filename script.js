@@ -8,15 +8,24 @@ import {
     signInWithEmailAndPassword 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
+// Configuração completa do Firebase
 const firebaseConfig = {
-    databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
+  apiKey: "AIzaSyAlmEQTnQM6UCMQbDBXkv-yeZVExqvuBtA",
+  authDomain: "retro-play-list.firebaseapp.com",
+  projectId: "retro-play-list",
+  storageBucket: "retro-play-list.firebasestorage.app",
+  messagingSenderId: "275741375910",
+  appId: "1:275741375910:web:5af396a0d9ae84b4dce367",
+  databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
 };
 
+// Inicialização dos serviços do Firebase
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 const provedorGoogle = new GoogleAuthProvider();
 
+// Elementos da interface
 const telaLogin = document.getElementById('tela-login');
 const telaTermos = document.getElementById('tela-termos');
 const btnAceitarTermos = document.getElementById('btn-aceitar-termos');
@@ -477,230 +486,4 @@ btnEntrarSala.addEventListener('click', async () => {
         const snapshot = await get(salaRef);
         
         if (snapshot.exists()) {
-            const dadosSala = snapshot.val();
-            const participantes = dadosSala.participantes || {};
-            let novasPessoas = dadosSala.quantidadePessoas || 0;
-
-            if (!participantes[nomeUsuarioLogado]) {
-                if (novasPessoas >= LIMITE_PESSOAS) {
-                    alert("Sala cheia! Limite de 8 utilizadores atingido.");
-                    return;
-                }
-                participantes[nomeUsuarioLogado] = true;
-                novasPessoas = novasPessoas + 1;
-            }
-            
-            salaAtual = entrada;
-            codigoGeradoTxt.textContent = entrada;
-
-            await update(salaRef, { 
-                quantidadePessoas: novasPessoas,
-                participantes: participantes
-            });
-            
-            configurarPresencaOnDisconnect(entrada);
-            conectarAoChatEPlaylist(entrada);
-            
-            push(ref(db, 'salas/' + entrada + '/chat'), {
-                tipo: "sistema",
-                texto: "[SISTEMA] O usuário " + nomeUsuarioLogado + " conectou-se à playlist."
-            });
-        } else {
-            alert("Esta sala não foi encontrada no Pixel-RetroPlaylist!");
-        }
-    } catch (e) { 
-        alert("Erro ao sincronizar com a sala.");
-    }
-});
-
-function configurarPresencaOnDisconnect(idSala) {
-    const salaRef = ref(db, 'salas/' + idSala);
-    get(salaRef).then((snapshot) => {
-        if (snapshot.exists()) {
-            const dados = snapshot.val();
-            let futurasPessoas = (dados.quantidadePessoas || 1) - 1;
-            if (futurasPessoas < 0) futurasPessoas = 0;
-
-            const participantes = dados.participantes || {};
-            if (participantes[nomeUsuarioLogado]) {
-                delete participantes[nomeUsuarioLogado];
-            }
-
-            onDisconnect(salaRef).update({
-                quantidadePessoas: futurasPessoas,
-                participantes: participantes
-            });
-        }
-    });
-}
-
-function conectarAoChatEPlaylist(idSala) {
-    playlistOrdenada = [];
-    listaPlaylist.innerHTML = '';
-    caixaChat.innerHTML = '';
-
-    const salaRef = ref(db, 'salas/' + idSala);
-    get(salaRef).then((snapshot) => {
-        if (snapshot.exists()) {
-            const dados = snapshot.val();
-            if (dados.musicas) {
-                Object.keys(dados.musicas).forEach(key => {
-                    const musica = dados.musicas[key];
-                    if (!playlistOrdenada.some(m => m.nome === musica.nome)) {
-                        playlistOrdenada.push(musica);
-                    }
-                });
-                atualizarInterfaceBiblioteca();
-            }
-        }
-    });
-
-    onChildAdded(ref(db, 'salas/' + idSala + '/chat'), (snapshot) => {
-        const dados = snapshot.val();
-        if (dados.tipo === "sistema") {
-            adicionarAvisoSistema(dados.texto);
-        } else {
-            adicionarMensagemNaTela(dados.usuario, dados.texto);
-        }
-    });
-
-    onChildAdded(ref(db, 'salas/' + idSala + '/musicas'), (snapshot) => {
-        const musica = snapshot.val();
-        if (!playlistOrdenada.some(m => m.nome === musica.nome)) {
-            playlistOrdenada.push(musica);
-            atualizarInterfaceBiblioteca();
-        }
-    });
-
-    onValue(ref(db, 'salas/' + idSala + '/comandoPlayer'), (snapshot) => {
-        const comando = snapshot.val();
-        if (!comando || comando.enviadoPor === nomeUsuarioLogado) return;
-
-        if (comando.acao === "play") {
-            const arquivoLocal = bibliotecaArquivosLocais[comando.nomeMusica];
-            if (arquivoLocal) {
-                player.src = arquivoLocal.url;
-                player.play().catch(() => {});
-            } else {
-                adicionarAvisoSistema("[AVISO] " + comando.enviadoPor + " reproduziu '" + comando.nomeMusica + "', mas precisas carregar este arquivo para sincronizar!");
-                atualizarInterfaceBiblioteca();
-            }
-        }
-    });
-}
-
-inputArquivo.addEventListener('change', function(evento) {
-    const arquivos = evento.target.files;
-    if (!salaAtual) return alert("Conecta-te a uma sala primeiro!");
-
-    for (let i = 0; i < arquivos.length; i++) {
-        const arquivo = arquivos[i];
-        const urlBlob = URL.createObjectURL(arquivo);
-        
-        bibliotecaArquivosLocais[arquivo.name] = { nome: arquivo.name, url: urlBlob };
-        push(ref(db, 'salas/' + salaAtual + '/musicas'), { nome: arquivo.name });
-        
-        push(ref(db, 'salas/' + salaAtual + '/chat'), {
-            tipo: "sistema",
-            texto: "[SISTEMA] " + nomeUsuarioLogado + " carregou a mídia: " + arquivo.name
-        });
-    }
-    salvarCacheLocal();
-    atualizarInterfaceBiblioteca();
-});
-
-function atualizarInterfaceBiblioteca() {
-    listaPlaylist.innerHTML = ''; 
-    playlistOrdenada.forEach((musica) => {
-        const item = document.createElement('li');
-        item.textContent = musica.nome;
-        item.classList.add('item-musica');
-        
-        if (bibliotecaArquivosLocais[musica.nome]) {
-            item.style.borderLeft = "4px solid #00ff00";
-            item.style.paddingLeft = "5px";
-        } else {
-            item.style.borderLeft = "4px solid #ff0000";
-            item.style.paddingLeft = "5px";
-        }
-
-        item.addEventListener('click', () => forcarReproducaoSincronizada(musica.nome));
-        listaPlaylist.appendChild(item);
-    });
-}
-
-function forcarReproducaoSincronizada(nomeMusica) {
-    const arquivoLocal = bibliotecaArquivosLocais[nomeMusica];
-    
-    if (!arquivoLocal) {
-        alert("Carrega o arquivo '" + nomeMusica + "' primeiro para ouvirem juntos!");
-        return;
-    }
-
-    player.src = arquivoLocal.url;
-    player.play().catch(() => {});
-
-    set(ref(db, 'salas/' + salaAtual + '/comandoPlayer'), {
-        acao: "play",
-        nomeMusica: nomeMusica,
-        enviadoPor: nomeUsuarioLogado
-    });
-
-    push(ref(db, 'salas/' + salaAtual + '/chat'), {
-        tipo: "sistema",
-        texto: "[SISTEMA] " + nomeUsuarioLogado + " iniciou a faixa: " + nomeMusica
-    });
-}
-
-btnEnviarMensagem.addEventListener('click', enviarMensagemDoInput);
-inputMensagem.addEventListener('keypress', (e) => { if (e.key === 'Enter') enviarMensagemDoInput(); });
-
-function enviarMensagemDoInput() {
-    const texto = inputMensagem.value.trim();
-    if (!texto || !salaAtual) return;
-
-    if (texto === "/admin-painel") {
-        inputMensagem.value = '';
-        window.location.href = "admin.html";
-        return;
-    }
-
-    push(ref(db, 'salas/' + salaAtual + '/chat'), {
-        tipo: "usuario",
-        usuario: nomeUsuarioLogado,
-        texto: texto
-    });
-    inputMensagem.value = '';
-}
-
-function adicionarMensagemNaTela(usuario, texto) {
-    const p = document.createElement('p');
-    p.classList.add('mensagem');
-    p.innerHTML = "<strong>" + usuario + ":</strong> " + texto;
-    caixaChat.appendChild(p);
-    caixaChat.scrollTop = caixaChat.scrollHeight;
-    
-    if (usuario !== nomeUsuarioLogado) {
-        try {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = audioCtx.createOscillator();
-            
-            osc.type = "sine"; 
-            osc.frequency.setValueAtTime(580, audioCtx.currentTime); 
-            
-            osc.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.045); 
-        } catch (e) {
-            console.warn("AudioContext não suportado no navegador atual.");
-        }
-    }
-}
-
-function adicionarAvisoSistema(texto) {
-    const div = document.createElement('div');
-    div.classList.add('sistema-aviso');
-    div.textContent = texto;
-    caixaChat.appendChild(div);
-    caixaChat.scrollTop = caixaChat.scrollHeight;
-}
+            const dadosSala = sn
