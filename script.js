@@ -16,7 +16,7 @@ const firebaseConfig = {
   storageBucket: "retro-play-list.firebasestorage.app",
   messagingSenderId: "275741375910",
   appId: "1:275741375910:web:5af396a0d9ae84b4dce367",
-  databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
+  databaseURL: "https://retro-play-list-default-rtdb.firebaseio.com"
 };
 
 // Inicialização dos serviços do Firebase
