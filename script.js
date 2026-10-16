@@ -1,6 +1,5 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { db, auth, provedorGoogle } from "./firebase-config.js";
 import { 
-    getDatabase, 
     ref, 
     set, 
     push, 
@@ -8,33 +7,16 @@ import {
     onValue, 
     get, 
     update, 
-    onDisconnect 
+    onDisconnect,
+    query,
+    orderByChild,
+    equalTo
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 import { 
-    getAuth, 
     signInWithPopup, 
-    GoogleAuthProvider, 
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-
-// ==========================================
-// CONFIGURAÇÃO E INICIALIZAÇÃO DO FIREBASE
-// ==========================================
-const firebaseConfig = {
-  apiKey: "AIzaSyAlmEQTnQM6UCMQbDBXkv-yeZVExqvuBtA",
-  authDomain: "retro-play-list.firebaseapp.com",
-  projectId: "retro-play-list",
-  storageBucket: "retro-play-list.firebasestorage.app",
-  messagingSenderId: "275741375910",
-  appId: "1:275741375910:web:5af396a0d9ae84b4dce367",
-  databaseURL: "https://retro-play-list-default-rtdb.firebaseio.com"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const auth = getAuth(app);
-const provedorGoogle = new GoogleAuthProvider();
 
 // ==========================================
 // ELEMENTOS DO DOM (MAPEAMENTO SEGURO)
@@ -156,7 +138,7 @@ function definirModoAutenticacao(modo) {
 
     if (inputSenha) {
         inputSenha.autocomplete = estaARegistar ? "new-password" : "current-password";
-        inputSenha.minLength = estaARegistar ? 6 : -1;
+        inputSenha.minLength = estaARegistar ? 6 : 0;
     }
 
     if (btnEntrarSistema) {
@@ -191,11 +173,14 @@ function traduzirErroAutenticacao(erro) {
         "auth/invalid-api-key": "Configuração de API inválida no Firebase.",
         "auth/operation-not-allowed": "Método de autenticação não ativado no Firebase Console.",
         "auth/invalid-credential": "Dados incorretos. Verifica o e-mail e a palavra-passe.",
+        "auth/invalid-login-credentials": "Dados incorretos. Verifica o e-mail e a palavra-passe.",
         "auth/invalid-email": "O e-mail introduzido é inválido.",
         "auth/email-already-in-use": "Este e-mail já está em uso por outro utilizador.",
         "auth/weak-password": "A palavra-passe deve ter pelo menos 6 caracteres.",
         "auth/user-not-found": "Não existe conta associada a este e-mail.",
         "auth/wrong-password": "Palavra-passe incorreta.",
+        "auth/user-disabled": "Esta conta foi desativada no Firebase.",
+        "auth/too-many-requests": "Foram feitas demasiadas tentativas. Aguarda um pouco e tenta novamente.",
         "auth/network-request-failed": "Sem ligação à rede. Verifica a tua Internet.",
         "auth/unauthorized-domain": "Domínio não autorizado no Firebase Console.",
         "auth/popup-blocked": "O navegador bloqueou a janela do Google. Ativa os pop-ups.",
@@ -218,7 +203,7 @@ function comTimeout(promessa, ms = 12000) {
 formAutenticacao?.addEventListener('submit', async (evento) => {
     evento.preventDefault();
     const email = inputEmail?.value.trim();
-    const senha = inputSenha?.value.trim();
+    const senha = inputSenha?.value ?? "";
     const usuario = inputUsuario ? inputUsuario.value.trim().toLowerCase() : "";
 
     if (!email || !senha) {
@@ -241,19 +226,22 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
             const credencial = await comTimeout(signInWithEmailAndPassword(auth, email, senha));
             const uid = credencial.user.uid;
 
-            const snapshot = await comTimeout(get(ref(db, 'usuarios')));
+            const consultaPerfil = query(
+                ref(db, 'usuarios'),
+                orderByChild('uid'),
+                equalTo(uid)
+            );
+            const snapshot = await comTimeout(get(consultaPerfil));
             let nomeEncontrado = null;
 
             if (snapshot.exists()) {
-                const todosUsuarios = snapshot.val();
-                Object.keys(todosUsuarios).forEach(nome => {
-                    if (todosUsuarios[nome].uid === uid || todosUsuarios[nome].email === email) {
-                        nomeEncontrado = nome;
-                        if (todosUsuarios[nome].statusSistema === "banimento") {
-                            throw { code: "auth/banned", message: todosUsuarios[nome].motivoStatus };
-                        }
+                const [nome, perfil] = Object.entries(snapshot.val())[0] || [];
+                if (nome && perfil) {
+                    nomeEncontrado = nome;
+                    if (perfil.statusSistema === "banimento") {
+                        throw { code: "auth/banned", message: perfil.motivoStatus };
                     }
-                });
+                }
             }
 
             nomeUsuarioLogado = nomeEncontrado ? nomeEncontrado.toUpperCase() : email.split('@')[0].toUpperCase();
@@ -384,17 +372,44 @@ function ouvirHistoricoSalas() {
                     div.style.padding = "10px";
                     div.style.border = ehPublica && !pertenceASala ? "2px dashed #00ff00" : "1px solid #808080";
 
-                    let htmlBotaoEliminar = "";
+                    let botaoEliminar = null;
                     if (sala.criador === nomeUsuarioLogado) {
-                        htmlBotaoEliminar = "<button class='botao-retro btn-eliminar-sala-remota' data-sala='" + idSala + "' style='position: absolute; right: 5px; top: 5px; padding: 2px 6px; font-size: 10px; cursor: pointer;'>Eliminar</button>";
+                        botaoEliminar = document.createElement('button');
+                        botaoEliminar.type = 'button';
+                        botaoEliminar.className = 'botao-retro btn-eliminar-sala-remota';
+                        botaoEliminar.dataset.sala = idSala;
+                        botaoEliminar.textContent = 'Eliminar';
+                        Object.assign(botaoEliminar.style, {
+                            position: 'absolute',
+                            right: '5px',
+                            top: '5px',
+                            padding: '2px 6px',
+                            fontSize: '10px',
+                            cursor: 'pointer'
+                        });
                     }
 
-                    let etiquetaTipo = ehPublica ? " <span style='color:#008000; font-weight:bold;'>[PÚBLICA]</span>" : " <span style='color:#a06000; font-weight:bold;'>[PRIVADA]</span>";
+                    const etiquetaTipo = document.createElement('span');
+                    etiquetaTipo.textContent = ehPublica ? ' [PÚBLICA]' : ' [PRIVADA]';
+                    etiquetaTipo.style.color = ehPublica ? '#008000' : '#a06000';
+                    etiquetaTipo.style.fontWeight = 'bold';
 
-                    div.innerHTML = htmlBotaoEliminar +
-                                    "<strong>Sala:</strong> " + idSala + etiquetaTipo + "<br>" +
-                                    "<strong>Dono:</strong> " + sala.criador + "<br>" +
-                                    "<strong>Ocupação (" + sala.quantidadePessoas + "/" + LIMITE_PESSOAS + "):</strong> " + participantes.join(', ');
+                    const adicionarLinha = (rotulo, valor) => {
+                        const forte = document.createElement('strong');
+                        forte.textContent = rotulo;
+                        div.append(forte, document.createTextNode(valor));
+                    };
+
+                    if (botaoEliminar) div.appendChild(botaoEliminar);
+                    adicionarLinha('Sala: ', idSala);
+                    div.appendChild(etiquetaTipo);
+                    div.appendChild(document.createElement('br'));
+                    adicionarLinha('Dono: ', sala.criador || 'Desconhecido');
+                    div.appendChild(document.createElement('br'));
+                    adicionarLinha(
+                        `Ocupação (${Number(sala.quantidadePessoas) || 0}/${LIMITE_PESSOAS}): `,
+                        participantes.join(', ')
+                    );
 
                     if (!pertenceASala && ehPublica) {
                         div.style.cursor = "pointer";
@@ -590,7 +605,9 @@ function conectarAoChatEPlaylist(idSala) {
                 div.style.fontStyle = "italic";
                 div.textContent = msg.texto;
             } else {
-                div.innerHTML = `<strong>${msg.usuario}:</strong> ${msg.texto}`;
+                const utilizador = document.createElement('strong');
+                utilizador.textContent = `${msg.usuario || 'Utilizador'}: `;
+                div.append(utilizador, document.createTextNode(msg.texto || ''));
             }
             caixaChat.appendChild(div);
             caixaChat.scrollTop = caixaChat.scrollHeight;

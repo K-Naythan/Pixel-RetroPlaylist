@@ -24,7 +24,7 @@ Backend & DB: Firebase (Auth & Realtime Database).
 
 Hosting: GitHub Pages com domínio customizado via js.org.
 
-## Executar no Replit
+## Executar localmente ou no Replit
 
 A aplicação é estática e não necessita de instalação de dependências. O servidor de desenvolvimento serve os ficheiros na porta 5000:
 
@@ -32,4 +32,15 @@ A aplicação é estática e não necessita de instalação de dependências. O 
 python3 -m http.server 5000 --bind 0.0.0.0
 ```
 
-O acesso por e-mail e palavra-passe e o acesso Google dependem da configuração da aplicação Firebase. A autenticação no código ainda precisa da configuração web completa do Firebase; sem ela, não é possível criar contas novas nem iniciar sessão através desses métodos. A base de dados e as respetivas regras continuam a ser geridas no Firebase.
+## Configuração Firebase
+
+A configuração Web partilhada pelo site e pelo painel está em `firebase-config.js`. Confirma no Firebase Console que:
+
+- Os métodos **E-mail/palavra-passe** e **Google** estão ativados em Authentication.
+- `k-naythan.github.io` está na lista de domínios autorizados de Authentication. Para desenvolvimento no Replit, autoriza também o domínio de pré-visualização usado.
+- As regras do Realtime Database permitem as operações autenticadas da aplicação. A consulta de perfil é feita por UID; adiciona um índice em `usuarios/uid` se necessário.
+- As regras do Realtime Database devem restringir as alterações de moderação a administradores. O painel admin não autentica nem verifica o papel de administrador por si só.
+
+A configuração Web, incluindo a chave `apiKey`, é enviada ao navegador e não é um segredo. Protege os dados com regras do Firebase e restrições da chave, não com valores secretos no código do cliente.
+
+O login e o registo são tratados no navegador; o formulário não deve enviar credenciais na URL.

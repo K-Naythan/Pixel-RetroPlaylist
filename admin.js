@@ -1,12 +1,5 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-
-const firebaseConfig = {
-    databaseURL: "https://retroplaylist-bcf3b-default-rtdb.firebaseio.com/"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+import { db } from "./firebase-config.js";
+import { ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
 const listaUsuariosAdmin = document.getElementById('lista-usuarios-admin');
 const adminUsuarioAlvo = document.getElementById('admin-usuario-alvo');
@@ -28,7 +21,7 @@ onValue(ref(db, 'usuarios'), (snapshot) => {
                 status = dados.statusSistema.toUpperCase();
             }
             
-            li.innerHTML = "<strong>" + username.toUpperCase() + "</strong> — Estado: [" + status + "]";
+            li.textContent = `${username.toUpperCase()} — Estado: [${status}]`;
             
             li.addEventListener('click', () => {
                 adminUsuarioAlvo.value = username;

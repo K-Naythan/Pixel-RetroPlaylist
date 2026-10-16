@@ -12,10 +12,13 @@ Não é necessário instalar dependências Node.js. O JavaScript importa o Fireb
 
 ## Configuração externa
 
-A autenticação e as salas usam o Firebase Realtime Database. A configuração atual inclui o URL da base de dados, mas não inclui a configuração web completa necessária para os métodos de autenticação. Não inventar nem substituir esses valores; completar a configuração quando os dados da aplicação Firebase estiverem disponíveis. O acesso ao Firebase também depende das regras configuradas no projeto Firebase.
+A autenticação e as salas usam o Firebase Authentication e o Realtime Database. Ambos os ecrãs importam a configuração Web partilhada de `firebase-config.js`; não manter configurações Firebase duplicadas. O domínio GitHub Pages e o domínio de pré-visualização precisam estar autorizados no Authentication. As regras do Realtime Database têm de permitir as operações da aplicação.
+
+A configuração Web do Firebase é pública no cliente. Nunca colocar tokens de GitHub ou outros segredos no código do navegador ou no repositório.
 
 ## Estrutura
 
 - `index.html`, `style.css`, `script.js`: aplicação principal.
 - `admin.html`, `admin.js`: painel de moderação.
+- `firebase-config.js`: inicialização partilhada do Firebase.
 - `README.md`: visão geral e instruções de execução.
