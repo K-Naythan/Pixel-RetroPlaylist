@@ -1,0 +1,1 @@
+- [GitHub push permissions](github-push-permissions.md) — authentication can succeed while repository write access is missing; use a repo-scoped token with Contents write.
