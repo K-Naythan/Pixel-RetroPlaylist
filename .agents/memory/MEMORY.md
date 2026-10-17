@@ -1,1 +1,2 @@
 - [GitHub push permissions](github-push-permissions.md) — authentication can succeed while repository write access is missing; use a repo-scoped token with Contents write.
+- [Sala audio behavior](sala-audio.md) — each participant selects and plays local audio on their own device; do not upload or share audio files by default.
