@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pixel-RetroPlaylist — playlists partilhadas</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="description" content="Pixel-RetroPlaylist — O teu leitor de música partilhado com o design clássico do Windows 98. Cria salas públicas ou privadas e ouve música em tempo real com amigos.">
     <meta name="keywords" content="retro, windows 98, playlist, pixel art, musica partilhada, chat, firebase">
     <meta name="author" content="Daniel">
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-theme="normal" data-mode="normal">
 
     <div id="tela-login" class="modal-bloqueio" role="dialog" aria-modal="true" aria-labelledby="titulo-login">
         <div class="janela-windows login-box">
@@ -65,75 +66,185 @@
         </div>
     </div>
 
-    <div class="janela-windows">
-        <div class="barra-titulo">
-            <span>Minha Playlist Retro</span>
-            <button class="botao-retro" style="padding: 0px 4px; margin: 0; font-size: 10px; font-weight: bold;">X</button>
+    <header class="app-toolbar">
+        <a class="app-brand" href="./" aria-label="Pixel-RetroPlaylist, início">
+            <span class="brand-mark" aria-hidden="true">PR</span>
+            <span>Pixel-RetroPlaylist</span>
+        </a>
+        <nav class="quick-nav" aria-label="Abrir janelas">
+            <button type="button" class="botao-retro" data-abrir-janela="janela-player">Minha Playlist</button>
+            <button type="button" class="botao-retro" data-abrir-janela="janela-salas">Conectar Playlist</button>
+            <button type="button" class="botao-retro" data-abrir-janela="janela-chat">Chat</button>
+        </nav>
+        <div class="toolbar-actions">
+            <button id="btn-temas" type="button" class="botao-retro">Temas</button>
+            <button id="btn-modo-setup" type="button" class="botao-retro" aria-pressed="false">Modo Setup</button>
+            <a id="link-admin" class="botao-retro admin-link escondido" href="admin.html">Painel ADM</a>
         </div>
-        <video id="player-mp4" controls></video>
-        <div class="importar-container" style="display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap;">
-            <label for="importar-arquivo" class="botao-retro" style="flex: 1; text-align: center; min-width: 110px;">Carregar Minhas Mídias</label>
-            <input type="file" id="importar-arquivo" accept="video/mp4, audio/mp3, audio/*, video/*" multiple style="display: none;">
-            <button id="btn-abrir-biblioteca" class="botao-retro" style="flex: 1; min-width: 110px;">Abrir Biblioteca</button>
-            <button id="btn-abrir-historico" class="botao-retro" style="flex: 1; min-width: 110px;">Histórico de Salas</button>
+        <div id="menu-temas" class="theme-menu escondido" role="group" aria-label="Escolher tema">
+            <span class="theme-menu-title">Escolhe um tema</span>
+            <button type="button" class="theme-option" data-tema="normal" aria-pressed="true">Normal retro</button>
+            <button type="button" class="theme-option" data-tema="coquette" aria-pressed="false">Coquette kawaii</button>
+            <button type="button" class="theme-option" data-tema="gotico" aria-pressed="false">Gótico retro</button>
         </div>
-    </div>
+    </header>
 
-    <div id="painel-biblioteca" class="janela-windows janela-flutuante escondida">
-        <div class="barra-titulo-flutuante barra-titulo">
-            <span>Biblioteca de Mídias</span>
-            <button id="btn-fechar-biblioteca" class="botao-fechar-painel botao-retro">X</button>
-        </div>
-        <div class="corpo-flutuante">
-            <p style="font-size: 11px; margin: 4px; color: #000000;">Verde: pronto na cache (tempo real). Vermelho: precisa de carregar no botão externo.</p>
-            <ul id="lista-playlist"></ul>
-        </div>
-    </div>
+    <main id="desktop-shell" class="desktop-shell">
+        <nav class="desktop-icons" aria-label="Ícones da área de trabalho">
+            <button type="button" class="desktop-icon" data-abrir-janela="janela-player">
+                <span class="desktop-glyph glyph-player" aria-hidden="true">♫</span>
+                <span>Minha Playlist<br>Retro</span>
+            </button>
+            <button type="button" class="desktop-icon" data-abrir-janela="janela-salas">
+                <span class="desktop-glyph glyph-folder" aria-hidden="true">▤</span>
+                <span>Conectar<br>Playlist</span>
+            </button>
+            <button type="button" class="desktop-icon" data-abrir-janela="janela-chat">
+                <span class="desktop-glyph glyph-chat" aria-hidden="true">▧</span>
+                <span>Chat da<br>Playlist</span>
+            </button>
+        </nav>
 
-    <div id="painel-historico" class="janela-windows janela-flutuante escondida">
+        <section id="janela-player" class="janela-windows app-window player-window" aria-labelledby="titulo-player">
+            <div class="barra-titulo window-titlebar">
+                <span id="titulo-player">Minha Playlist Retro</span>
+                <button type="button" class="window-close botao-retro" data-fechar-janela="janela-player" aria-label="Fechar Minha Playlist Retro">X</button>
+            </div>
+
+            <div class="player-shell">
+                <div class="visualizer-frame">
+                    <div class="visualizer-heading">
+                        <span>PLAYER</span>
+                        <span class="visualizer-live"><i></i> VISUALIZADOR RETRO</span>
+                    </div>
+                    <div class="visualizer-stage">
+                        <canvas id="visualizador-audio" aria-hidden="true"></canvas>
+                        <div class="visualizer-mascot" aria-hidden="true">
+                            <svg viewBox="0 0 210 210" role="presentation">
+                                <path d="M51 91C42 48 65 24 105 24s63 24 54 67" fill="none" stroke="var(--accent-strong)" stroke-width="10" stroke-linecap="round"/>
+                                <rect x="35" y="82" width="31" height="57" rx="12" fill="var(--accent-color)" stroke="var(--ink-color)" stroke-width="3"/>
+                                <rect x="144" y="82" width="31" height="57" rx="12" fill="var(--accent-color)" stroke="var(--ink-color)" stroke-width="3"/>
+                                <path d="M54 82 48 48 77 62c17-13 39-13 56 0l29-14-6 37c15 12 22 31 17 53-7 30-35 43-69 43s-62-13-69-43c-5-22 2-41 18-56Z" fill="#fffdfd" stroke="var(--ink-color)" stroke-width="3" stroke-linejoin="round"/>
+                                <ellipse cx="82" cy="113" rx="5" ry="8" fill="#17131b"/>
+                                <ellipse cx="128" cy="113" rx="5" ry="8" fill="#17131b"/>
+                                <ellipse cx="105" cy="126" rx="6" ry="4" fill="#f1c64c" stroke="#a17625" stroke-width="1.5"/>
+                                <path d="M105 131q-4 8-10 4m10-4q4 8 10 4" fill="none" stroke="#17131b" stroke-width="2" stroke-linecap="round"/>
+                                <ellipse cx="68" cy="128" rx="8" ry="4" fill="var(--accent-soft)"/>
+                                <ellipse cx="142" cy="128" rx="8" ry="4" fill="var(--accent-soft)"/>
+                                <path d="M86 164q19-10 38 0l11 38H75Z" fill="var(--accent-color)" stroke="var(--ink-color)" stroke-width="3" stroke-linejoin="round"/>
+                                <path d="M93 169 105 179l12-10" fill="none" stroke="var(--accent-strong)" stroke-width="3"/>
+                                <path d="M131 58c-15-20-29 1-13 12l18 12 15-17c13-17-4-28-20-7Z" fill="var(--accent-color)" stroke="var(--ink-color)" stroke-width="2.5"/>
+                                <circle cx="137" cy="69" r="3" fill="#fff"/>
+                                <path d="M27 157l5 9 10 2-8 6 2 10-9-5-8 5 2-10-8-6 10-2Z" fill="var(--accent-color)" stroke="var(--accent-strong)" stroke-width="1"/>
+                                <path d="M176 151l3 6 7 1-5 4 1 7-6-3-6 3 1-7-5-4 7-1Z" fill="var(--accent-color)" stroke="var(--accent-strong)" stroke-width="1"/>
+                            </svg>
+                        </div>
+                        <div id="visualizer-placeholder" class="visualizer-placeholder">
+                            <span class="placeholder-note" aria-hidden="true">♫</span>
+                            <span>Escolhe uma faixa para começar</span>
+                        </div>
+                        <div class="visualizer-decoration" aria-hidden="true">✦</div>
+                    </div>
+                </div>
+
+                <div class="track-details">
+                    <div>
+                        <p class="eyebrow">A TOCAR AGORA</p>
+                        <h1 id="titulo-faixa">Nenhuma faixa selecionada</h1>
+                        <p id="estado-audio" class="audio-status" role="status" aria-live="polite">Os ficheiros são carregados apenas neste dispositivo.</p>
+                    </div>
+                    <span class="track-heart" aria-hidden="true">♡</span>
+                </div>
+
+                <div class="seek-row">
+                    <span id="tempo-atual">0:00</span>
+                    <input id="seek-audio" type="range" min="0" max="1000" value="0" aria-label="Posição da faixa">
+                    <span id="duracao-audio">0:00</span>
+                </div>
+
+                <div class="player-controls" aria-label="Controlos de reprodução">
+                    <button id="btn-faixa-anterior" type="button" class="transport-button" aria-label="Faixa anterior">|◀</button>
+                    <button id="btn-reproduzir" type="button" class="play-button" aria-label="Reproduzir">▶</button>
+                    <button id="btn-faixa-seguinte" type="button" class="transport-button" aria-label="Faixa seguinte">▶|</button>
+                </div>
+
+                <div class="volume-row">
+                    <label for="volume-audio">VOLUME</label>
+                    <input id="volume-audio" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Volume">
+                    <span id="volume-valor">80%</span>
+                </div>
+
+                <div class="player-actions">
+                    <input type="file" id="importar-arquivo" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac,.opus" multiple>
+                    <label for="importar-arquivo" class="botao-retro import-button">Carregar áudio</label>
+                    <button id="btn-abrir-biblioteca" type="button" class="botao-retro">Biblioteca</button>
+                    <button id="btn-abrir-historico" type="button" class="botao-retro">Histórico de salas</button>
+                </div>
+                <p class="local-audio-note">O áudio não é enviado para a sala. Cada pessoa escolhe os seus próprios ficheiros. Se o Instagram bloquear o seletor, abre no Chrome ou Safari.</p>
+
+                <section id="painel-biblioteca" class="library-panel escondido" aria-labelledby="titulo-biblioteca">
+                    <div class="library-heading">
+                        <h2 id="titulo-biblioteca">Biblioteca deste dispositivo</h2>
+                        <button id="btn-limpar-biblioteca" type="button" class="botao-retro">Limpar lista</button>
+                    </div>
+                    <ul id="lista-playlist" aria-live="polite"></ul>
+                </section>
+            </div>
+            <audio id="audio-player" preload="metadata"></audio>
+        </section>
+
+        <section id="janela-salas" class="janela-windows app-window connection-window" aria-labelledby="titulo-salas">
+            <div class="barra-titulo window-titlebar">
+                <span id="titulo-salas">Conectar Playlist</span>
+                <button type="button" class="window-close botao-retro" data-fechar-janela="janela-salas" aria-label="Fechar Conectar Playlist">X</button>
+            </div>
+            <div class="sala-controles">
+                <label for="select-tipo-sala">Tipo de sala</label>
+                <select id="select-tipo-sala">
+                    <option value="privada">Privada (com código)</option>
+                    <option value="publica">Pública (visível no histórico)</option>
+                </select>
+                <button id="btn-criar-sala" type="button" class="botao-retro primary-action">Criar sala</button>
+                <p class="room-code-line">O teu código: <strong id="codigo-gerado">—</strong></p>
+                <div class="join-room-row">
+                    <input type="text" id="input-codigo-convite" placeholder="Ex.: SALA-1234 ou 1234" aria-label="Código de convite">
+                    <button id="btn-entrar-sala" type="button" class="botao-retro">Entrar</button>
+                </div>
+                <button id="btn-abrir-historico-secundario" type="button" class="text-button">Ver histórico e salas vazias</button>
+            </div>
+        </section>
+
+        <section id="janela-chat" class="janela-windows app-window chat-window" aria-labelledby="titulo-chat">
+            <div class="barra-titulo window-titlebar">
+                <span id="titulo-chat">Chat da Playlist</span>
+                <button type="button" class="window-close botao-retro" data-fechar-janela="janela-chat" aria-label="Fechar Chat da Playlist">X</button>
+            </div>
+            <div class="chat-content">
+                <p id="estado-sala" class="room-status">Entra numa sala para abrir o chat.</p>
+                <div id="caixa-chat" aria-live="polite"></div>
+                <div class="chat-input-container">
+                    <input type="text" id="input-mensagem" placeholder="Escreve uma mensagem..." aria-label="Mensagem">
+                    <button id="btn-enviar-mensagem" type="button" class="botao-retro">Enviar</button>
+                </div>
+            </div>
+        </section>
+
+        <div id="desktop-taskbar" class="desktop-taskbar">
+            <button id="btn-temas-desktop" type="button" class="taskbar-theme" aria-label="Abrir temas" title="Temas">◐</button>
+            <span class="taskbar-app-name">Pixel-RetroPlaylist</span>
+            <span id="desktop-status" class="taskbar-status">DESLIGADO DA SALA</span>
+        </div>
+    </main>
+
+    <section id="painel-historico" class="janela-windows janela-flutuante escondido" aria-labelledby="titulo-historico">
         <div class="barra-titulo-flutuante barra-titulo">
-            <span>Histórico de Salas</span>
-            <button id="btn-fechar-historico" class="botao-fechar-painel botao-retro">X</button>
+            <span id="titulo-historico">Histórico de salas</span>
+            <button id="btn-fechar-historico" type="button" class="botao-fechar-painel botao-retro" aria-label="Fechar histórico">X</button>
         </div>
         <div class="corpo-flutuante" id="lista-salas-historico">
-            <p style="font-size: 11px; color: #000000; padding: 4px;">A carregar lista de salas ativos no servidor...</p>
+            <p class="empty-room-copy">A carregar salas...</p>
         </div>
-    </div>
-
-    <div class="janela-windows" style="margin-top: 15px;">
-        <div class="barra-titulo">
-            <span>Conectar Playlist</span>
-            <button class="botao-retro" style="padding: 0px 4px; margin: 0; font-size: 10px; font-weight: bold;">X</button>
-        </div>
-        <div class="sala-controles" style="padding: 4px;">
-            <div style="margin-bottom: 10px;">
-                <label for="select-tipo-sala" style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">Tipo de Sala:</label>
-                <select id="select-tipo-sala" style="width: 100%;">
-                    <option value="privada">Privada (Apenas com Código)</option>
-                    <option value="publica">Pública (Aparece no Histórico Global)</option>
-                </select>
-            </div>
-            <button id="btn-criar-sala" class="botao-retro" style="width: 100%;">Criar Código</button>
-            <p style="margin-top: 8px; font-size: 12px;">Seu Código: <strong id="codigo-gerado">-</strong></p>
-            <hr>
-            <input type="text" id="input-codigo-convite" placeholder="Ex: SALA-1234 ou 1234" style="width: 100%;">
-            <button id="btn-entrar-sala" class="botao-retro" style="width: 100%; margin-top: 4px;">Entrar na Playlist</button>
-        </div>
-    </div>
-
-    <div class="janela-windows" style="margin-top: 15px;">
-        <div class="barra-titulo">
-            <span>Chat da Playlist</span>
-            <button class="botao-retro" style="padding: 0px 4px; margin: 0; font-size: 10px; font-weight: bold;">X</button>
-        </div>
-        <div style="padding: 4px;">
-            <div id="caixa-chat"></div>
-            <div class="chat-input-container">
-                <input type="text" id="input-mensagem" placeholder="Digite uma mensagem...">
-                <button id="btn-enviar-mensagem" class="botao-retro">Enviar</button>
-            </div>
-        </div>
-    </div>
+    </section>
 
     <script type="module" src="script.js"></script>
 </body>

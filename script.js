@@ -1,4 +1,4 @@
-import { db, auth, provedorGoogle } from "./firebase-config.js";
+import { db, auth, provedorGoogle, ADMIN_EMAIL } from "./firebase-config.js";
 import { 
     ref, 
     set, 
@@ -10,13 +10,18 @@ import {
     onDisconnect,
     query,
     orderByChild,
-    equalTo
+    equalTo,
+    runTransaction
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 import { 
     signInWithPopup, 
     createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword 
+    signInWithEmailAndPassword,
+    deleteUser,
+    onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+import "./audio-player.js";
 
 // ==========================================
 // ELEMENTOS DO DOM (MAPEAMENTO SEGURO)
@@ -38,18 +43,13 @@ const inputSenha = document.getElementById('login-senha');
 const btnEntrarSistema = document.getElementById('btn-entrar-sistema');
 const btnGoogleLogin = document.getElementById('btn-google-login');
 
-const player = document.getElementById('player-mp4');
-const inputArquivo = document.getElementById('importar-arquivo');
-const listaPlaylist = document.getElementById('lista-playlist');
-
-const painelBiblioteca = document.getElementById('painel-biblioteca');
-const btnAbrirBiblioteca = document.getElementById('btn-abrir-biblioteca');
-const btnFecharBiblioteca = document.getElementById('btn-fechar-biblioteca');
-
 const painelHistorico = document.getElementById('painel-historico');
 const btnAbrirHistorico = document.getElementById('btn-abrir-historico');
 const btnFecharHistorico = document.getElementById('btn-fechar-historico');
 const listaSalasHistorico = document.getElementById('lista-salas-historico');
+const linkAdmin = document.getElementById('link-admin');
+const desktopStatus = document.getElementById('desktop-status');
+const estadoSala = document.getElementById('estado-sala');
 
 const btnCriarSala = document.getElementById('btn-criar-sala');
 const btnEntrarSala = document.getElementById('btn-entrar-sala');
@@ -64,49 +64,29 @@ const btnEnviarMensagem = document.getElementById('btn-enviar-mensagem');
 // ==========================================
 // ESTADO GLOBAL DA APLICAÇÃO
 // ==========================================
-let bibliotecaArquivosLocais = {};
-let playlistOrdenada = [];
 let salaAtual = null;
 let nomeUsuarioLogado = null; 
 let modoAtual = "login";
 const LIMITE_PESSOAS = 8;
+let cancelarHistoricoSalas = null;
+let cancelarChatAtual = null;
 
-// ==========================================
-// GESTÃO DA CACHE LOCAL (LOCALSTORAGE)
-// ==========================================
-function carregarCacheLocal() {
-    try {
-        const cacheSalva = localStorage.getItem('pixel_retro_playlist_cache');
-        if (cacheSalva) {
-            bibliotecaArquivosLocais = JSON.parse(cacheSalva);
-        }
-    } catch (e) {
-        console.warn("Falha ao carregar cache local:", e);
-        bibliotecaArquivosLocais = {};
-    }
-}
-
-function salvarCacheLocal() {
-    try {
-        localStorage.setItem('pixel_retro_playlist_cache', JSON.stringify(bibliotecaArquivosLocais));
-    } catch (e) {
-        console.warn("Falha ao guardar cache local:", e);
-    }
-}
-
-carregarCacheLocal();
+onAuthStateChanged(auth, (utilizador) => {
+    const email = utilizador?.email?.trim().toLowerCase();
+    const eAdministradora = email === ADMIN_EMAIL.toLowerCase();
+    linkAdmin?.classList.toggle('escondido', !eAdministradora);
+});
 
 // ==========================================
 // CONTROLO DE PAINEIS E ABAS
 // ==========================================
-btnAbrirBiblioteca?.addEventListener('click', () => painelBiblioteca?.classList.remove('escondida'));
-btnFecharBiblioteca?.addEventListener('click', () => painelBiblioteca?.classList.add('escondida'));
-
 btnAbrirHistorico?.addEventListener('click', () => {
-    painelHistorico?.classList.remove('escondida');
+    painelHistorico?.classList.remove('escondido');
     ouvirHistoricoSalas();
 });
-btnFecharHistorico?.addEventListener('click', () => painelHistorico?.classList.add('escondida'));
+btnFecharHistorico?.addEventListener('click', () => painelHistorico?.classList.add('escondido'));
+
+document.addEventListener('pixel:open-room-history', ouvirHistoricoSalas);
 
 btnAbaLogin?.addEventListener('click', () => definirModoAutenticacao("login"));
 btnAbaRegistro?.addEventListener('click', () => definirModoAutenticacao("registro"));
@@ -237,7 +217,7 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
             if (snapshot.exists()) {
                 const [nome, perfil] = Object.entries(snapshot.val())[0] || [];
                 if (nome && perfil) {
-                    nomeEncontrado = nome;
+                    nomeEncontrado = perfil.username || nome;
                     if (perfil.statusSistema === "banimento") {
                         throw { code: "auth/banned", message: perfil.motivoStatus };
                     }
@@ -250,21 +230,29 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
 
         } else {
             const userRef = ref(db, 'usuarios/' + usuario);
-            const snapshot = await comTimeout(get(userRef));
-
-            if (snapshot.exists()) {
-                mostrarMensagemAutenticacao("Este nome de utilizador já está registado.");
-                return;
-            }
-
             const credencial = await comTimeout(createUserWithEmailAndPassword(auth, email, senha));
-            
-            await set(userRef, { 
-                uid: credencial.user.uid,
-                email: email,
-                statusSistema: "nenhuma",
-                motivoStatus: ""
-            });
+
+            try {
+                const resultado = await comTimeout(runTransaction(userRef, (perfilAtual) => {
+                    if (perfilAtual !== null) return;
+                    return {
+                        uid: credencial.user.uid,
+                        email: email,
+                        username: usuario,
+                        statusSistema: "nenhuma",
+                        motivoStatus: ""
+                    };
+                }, { applyLocally: false }));
+
+                if (!resultado.committed) {
+                    await deleteUser(credencial.user).catch(() => {});
+                    mostrarMensagemAutenticacao("Este nome de utilizador já está registado.");
+                    return;
+                }
+            } catch (erroPerfil) {
+                await deleteUser(credencial.user).catch(() => {});
+                throw erroPerfil;
+            }
 
             nomeUsuarioLogado = usuario.toUpperCase();
             telaLogin?.classList.add('escondido');
@@ -293,28 +281,33 @@ btnGoogleLogin?.addEventListener('click', async () => {
     try {
         const resultado = await signInWithPopup(auth, provedorGoogle);
         const usuarioFirebase = resultado.user;
-        
-        let usernameBase = usuarioFirebase.displayName ? usuarioFirebase.displayName.split(' ')[0] : "USER";
-        let usuarioLimpo = usernameBase.toLowerCase().replace(/[^a-z0-9]/g, "") || "user" + Math.floor(Math.random() * 1000);
-        
-        const userRef = ref(db, 'usuarios/' + usuarioLimpo);
-        const snapshot = await comTimeout(get(userRef));
-        
-        if (snapshot.exists() && snapshot.val().statusSistema === "banimento") {
+        const consultaPerfil = query(ref(db, 'usuarios'), orderByChild('uid'), equalTo(usuarioFirebase.uid));
+        const snapshot = await comTimeout(get(consultaPerfil));
+        const [nomeGuardado, perfilGuardado] = snapshot.exists()
+            ? Object.entries(snapshot.val())[0] || []
+            : [];
+
+        if (perfilGuardado?.statusSistema === "banimento") {
             mostrarMensagemAutenticacao("Esta conta Google foi suspensa do sistema.");
             return;
         }
 
-        let dadosUsuarioSalvar = snapshot.exists() ? snapshot.val() : null;
+        let dadosUsuarioSalvar = perfilGuardado || null;
+        let usuarioLimpo = perfilGuardado?.username || nomeGuardado || "";
 
-        if (!snapshot.exists()) {
+        if (!dadosUsuarioSalvar) {
+            const usernameBase = usuarioFirebase.displayName
+                ? usuarioFirebase.displayName.split(' ')[0]
+                : "USER";
+            usuarioLimpo = `${usernameBase.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "user"}-${usuarioFirebase.uid.slice(-8).toLowerCase()}`;
             dadosUsuarioSalvar = {
                 uid: usuarioFirebase.uid,
-                email: usuarioFirebase.email,
+                email: usuarioFirebase.email || "",
+                username: usuarioLimpo,
                 statusSistema: "nenhuma",
                 motivoStatus: ""
             };
-            await set(userRef, dadosUsuarioSalvar);
+            await set(ref(db, `usuarios/${usuarioLimpo}`), dadosUsuarioSalvar);
         }
 
         nomeUsuarioLogado = usuarioLimpo.toUpperCase();
@@ -346,99 +339,110 @@ function chamarFluxoTermos(dadosUser) {
 // SALAS EM TEMPO REAL E HISTÓRICO
 // ==========================================
 function ouvirHistoricoSalas() {
-    if (!nomeUsuarioLogado || !listaSalasHistorico) return;
+    if (!nomeUsuarioLogado || !listaSalasHistorico || cancelarHistoricoSalas) return;
 
-    onValue(ref(db, 'salas'), (snapshot) => {
+    cancelarHistoricoSalas = onValue(ref(db, 'salas'), (snapshot) => {
         listaSalasHistorico.innerHTML = '';
         let encontrouSalas = false;
+        const nomeAtual = String(nomeUsuarioLogado || '').trim().toLowerCase();
+        const eAdministradora = auth.currentUser?.email?.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
         if (snapshot.exists()) {
             const salas = snapshot.val();
-            Object.keys(salas).forEach(idSala => {
-                const sala = salas[idSala];
+            Object.entries(salas).forEach(([idSala, sala]) => {
                 if (!sala) return;
 
-                const participantes = sala.participantes ? Object.keys(sala.participantes) : [];
-                const pertenceASala = sala.criador === nomeUsuarioLogado || participantes.includes(nomeUsuarioLogado);
+                const criador = String(sala.criador || '').trim().toLowerCase();
+                const presencas = sala.presencas && typeof sala.presencas === "object" ? sala.presencas : {};
+                const participantesGuardados = sala.participantes && typeof sala.participantes === "object"
+                    ? sala.participantes
+                    : {};
+                const participantesAtivos = Object.entries(participantesGuardados)
+                    .filter(([, uid]) => typeof uid === "string" && Boolean(presencas[uid]))
+                    .map(([nome]) => nome);
+                const participantesDesatualizados = Object.entries(participantesGuardados)
+                    .filter(([, uid]) => typeof uid !== "string" || !presencas[uid])
+                    .map(([nome]) => nome);
+                const participantes = participantesAtivos;
+                const pertenceASala = criador === nomeAtual ||
+                    participantes.some((nome) => String(nome).trim().toLowerCase() === nomeAtual);
                 const ehPublica = sala.tipoExibicao === "publica";
-                const salaAtiva = (sala.quantidadePessoas >= 0);
+                const salaVazia = participantes.length === 0;
 
-                if ((pertenceASala || ehPublica) && salaAtiva) {
+                if (participantesDesatualizados.length && (eAdministradora || criador === nomeAtual)) {
+                    const correcao = { quantidadePessoas: participantes.length };
+                    participantesDesatualizados.forEach((nome) => {
+                        correcao[`participantes/${nome}`] = null;
+                    });
+                    update(ref(db, `salas/${idSala}`), correcao).catch((error) => {
+                        console.warn(`Não foi possível limpar a presença antiga da sala ${idSala}:`, error);
+                    });
+                }
+
+                if ((eAdministradora || pertenceASala || ehPublica) && (!salaVazia || pertenceASala || eAdministradora)) {
                     encontrouSalas = true;
                     const div = document.createElement('div');
                     div.classList.add('item-sala-historico');
-                    div.style.position = "relative";
-                    div.style.marginBottom = "10px";
-                    div.style.padding = "10px";
-                    div.style.border = ehPublica && !pertenceASala ? "2px dashed #00ff00" : "1px solid #808080";
+                    div.dataset.sala = idSala;
 
-                    let botaoEliminar = null;
-                    if (sala.criador === nomeUsuarioLogado) {
-                        botaoEliminar = document.createElement('button');
+                    const linhaCabecalho = document.createElement('div');
+                    linhaCabecalho.className = 'room-history-heading';
+                    const titulo = document.createElement('strong');
+                    titulo.textContent = idSala;
+                    const etiquetaTipo = document.createElement('span');
+                    etiquetaTipo.className = 'room-type-label';
+                    etiquetaTipo.textContent = ehPublica ? 'PÚBLICA' : 'PRIVADA';
+                    linhaCabecalho.append(titulo, etiquetaTipo);
+
+                    if (criador === nomeAtual || eAdministradora) {
+                        const botaoEliminar = document.createElement('button');
                         botaoEliminar.type = 'button';
                         botaoEliminar.className = 'botao-retro btn-eliminar-sala-remota';
                         botaoEliminar.dataset.sala = idSala;
                         botaoEliminar.textContent = 'Eliminar';
-                        Object.assign(botaoEliminar.style, {
-                            position: 'absolute',
-                            right: '5px',
-                            top: '5px',
-                            padding: '2px 6px',
-                            fontSize: '10px',
-                            cursor: 'pointer'
+                        botaoEliminar.setAttribute('aria-label', `Eliminar a sala ${idSala}`);
+                        linhaCabecalho.appendChild(botaoEliminar);
+                        botaoEliminar.addEventListener('click', async (event) => {
+                            event.stopPropagation();
+                            if (confirm(`Eliminar a sala ${idSala}? Esta ação não pode ser desfeita.`)) {
+                                await eliminarSalaRemotamente(idSala);
+                            }
                         });
                     }
 
-                    const etiquetaTipo = document.createElement('span');
-                    etiquetaTipo.textContent = ehPublica ? ' [PÚBLICA]' : ' [PRIVADA]';
-                    etiquetaTipo.style.color = ehPublica ? '#008000' : '#a06000';
-                    etiquetaTipo.style.fontWeight = 'bold';
+                    const detalhes = document.createElement('p');
+                    detalhes.textContent = `Criada por ${sala.criador || 'utilizador desconhecido'} · ${participantes.length}/${LIMITE_PESSOAS} pessoas`;
+                    const presenca = document.createElement('p');
+                    presenca.className = salaVazia ? 'room-empty-label' : 'room-participants';
+                    presenca.textContent = salaVazia
+                        ? 'Sala vazia — sem participantes ligados'
+                        : `Ligados: ${participantes.join(', ')}`;
+                    div.append(linhaCabecalho, detalhes, presenca);
 
-                    const adicionarLinha = (rotulo, valor) => {
-                        const forte = document.createElement('strong');
-                        forte.textContent = rotulo;
-                        div.append(forte, document.createTextNode(valor));
-                    };
-
-                    if (botaoEliminar) div.appendChild(botaoEliminar);
-                    adicionarLinha('Sala: ', idSala);
-                    div.appendChild(etiquetaTipo);
-                    div.appendChild(document.createElement('br'));
-                    adicionarLinha('Dono: ', sala.criador || 'Desconhecido');
-                    div.appendChild(document.createElement('br'));
-                    adicionarLinha(
-                        `Ocupação (${Number(sala.quantidadePessoas) || 0}/${LIMITE_PESSOAS}): `,
-                        participantes.join(', ')
-                    );
-
-                    if (!pertenceASala && ehPublica) {
+                    if (!pertenceASala && ehPublica && !salaVazia) {
                         div.style.cursor = "pointer";
-                        div.addEventListener('click', (e) => {
-                            if (!e.target.classList.contains('btn-eliminar-sala-remota')) {
-                                if (inputCodigoConvite) inputCodigoConvite.value = idSala;
-                                btnEntrarSala?.click();
-                            }
+                        div.addEventListener('click', () => {
+                            if (inputCodigoConvite) inputCodigoConvite.value = idSala;
+                            btnEntrarSala?.click();
                         });
                     }
 
                     listaSalasHistorico.appendChild(div);
                 }
             });
-
-            document.querySelectorAll('.btn-eliminar-sala-remota').forEach(botao => {
-                botao.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const idParaDeletar = e.target.getAttribute('data-sala');
-                    if (confirm("Desejas eliminar a " + idParaDeletar + "?")) {
-                        await eliminarSalaRemotamente(idParaDeletar);
-                    }
-                });
-            });
         }
 
         if (!encontrouSalas) {
-            listaSalasHistorico.innerHTML = "<p style='font-size:12px; color:#555;'>Nenhuma sala pública disponível no momento.</p>";
+            const empty = document.createElement('p');
+            empty.className = 'empty-room-copy';
+            empty.textContent = eAdministradora
+                ? 'Não há salas guardadas.'
+                : 'Não há salas públicas ativas no momento.';
+            listaSalasHistorico.appendChild(empty);
         }
+    }, (error) => {
+        console.error("Não foi possível carregar o histórico de salas:", error);
+        listaSalasHistorico.textContent = "Não foi possível carregar as salas. Verifica as regras do Firebase.";
     });
 }
 
@@ -449,10 +453,16 @@ async function eliminarSalaRemotamente(idSala) {
             salaAtual = null;
             if (codigoGeradoTxt) codigoGeradoTxt.textContent = "-";
             if (caixaChat) caixaChat.innerHTML = '';
+            cancelarChatAtual?.();
+            cancelarChatAtual = null;
+            atualizarEstadoSala("A sala foi eliminada. Entra ou cria outra sala.");
             alert("A tua sala atual foi encerrada do servidor.");
         }
     } catch (e) {
-        alert("Erro ao eliminar a sala.");
+        console.error("Erro ao eliminar sala:", e);
+        alert(e?.code === "PERMISSION_DENIED"
+            ? "O Firebase recusou a eliminação. Aplica as regras de database.rules.json na base de dados."
+            : "Não foi possível eliminar a sala. Verifica a ligação e tenta novamente.");
     }
 }
 
@@ -465,17 +475,21 @@ async function sairDaSalaAtual() {
 
         if (snapshot.exists()) {
             const dadosSala = snapshot.val();
-            const participantes = dadosSala.participantes || {};
+            const participantes = { ...(dadosSala.participantes || {}) };
+            const uidAtual = auth.currentUser?.uid;
 
             if (participantes[nomeUsuarioLogado]) {
                 delete participantes[nomeUsuarioLogado];
-
-                let novasPessoas = (dadosSala.quantidadePessoas || 1) - 1;
-                if (novasPessoas < 0) novasPessoas = 0;
+                const presencas = { ...(dadosSala.presencas || {}) };
+                if (uidAtual) delete presencas[uidAtual];
+                const membrosAtivos = Object.fromEntries(Object.entries(participantes)
+                    .filter(([, uid]) => typeof uid === "string" && Boolean(presencas[uid])));
+                const novasPessoas = Object.keys(membrosAtivos).length;
 
                 await update(salaRef, {
                     quantidadePessoas: novasPessoas,
-                    participantes: participantes
+                    participantes: membrosAtivos,
+                    presencas: presencas
                 });
 
                 push(ref(db, 'salas/' + salaAtual + '/chat'), {
@@ -491,44 +505,72 @@ async function sairDaSalaAtual() {
     salaAtual = null;
     if (codigoGeradoTxt) codigoGeradoTxt.textContent = "-";
     if (caixaChat) caixaChat.innerHTML = '';
+    atualizarEstadoSala("Entra numa sala para abrir o chat.");
+    cancelarChatAtual?.();
+    cancelarChatAtual = null;
+}
+
+function atualizarEstadoSala(mensagem) {
+    if (estadoSala) estadoSala.textContent = mensagem;
+    if (desktopStatus) desktopStatus.textContent = salaAtual ? `LIGADO: ${salaAtual}` : "DESLIGADO DA SALA";
 }
 
 btnCriarSala?.addEventListener('click', async () => {
-    if (!nomeUsuarioLogado) return;
+    if (!nomeUsuarioLogado) {
+        alert("Inicia sessão antes de criares uma sala.");
+        return;
+    }
 
     if (salaAtual) await sairDaSalaAtual();
 
     const tipoVisibilidade = selectTipoSala ? selectTipoSala.value : "privada";
-    const numeros = Math.floor(1000 + Math.random() * 9000);
-    const idSala = "SALA-" + numeros;
-
-    salaAtual = idSala;
-    if (codigoGeradoTxt) codigoGeradoTxt.textContent = idSala;
-
+    let idSala = null;
     try {
-        const salaRef = ref(db, 'salas/' + idSala);
-        await set(salaRef, {
-            criador: nomeUsuarioLogado,
-            quantidadePessoas: 1,
-            tipoExibicao: tipoVisibilidade,
-            participantes: { [nomeUsuarioLogado]: true },
-            comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
-        });
+        let salaCriada = false;
+        for (let tentativa = 0; tentativa < 5 && !salaCriada; tentativa += 1) {
+            const numeros = Math.floor(1000 + Math.random() * 9000);
+            idSala = "SALA-" + numeros;
+            const salaRef = ref(db, 'salas/' + idSala);
+            const resultado = await runTransaction(salaRef, (salaExistente) => {
+                if (salaExistente !== null) return;
+                return {
+                    criador: nomeUsuarioLogado,
+                    criadorUid: auth.currentUser?.uid || "",
+                    criadaEm: Date.now(),
+                    quantidadePessoas: 1,
+                    tipoExibicao: tipoVisibilidade,
+                    participantes: { [nomeUsuarioLogado]: auth.currentUser?.uid || "" },
+                    presencas: auth.currentUser?.uid ? { [auth.currentUser.uid]: true } : {},
+                    comandoPlayer: { acao: "parado", nomeMusica: "", enviadoPor: "" }
+                };
+            }, { applyLocally: false });
+            salaCriada = resultado.committed;
+        }
 
-        configurarPresencaOnDisconnect(idSala);
+        if (!salaCriada || !idSala) throw new Error("Não foi possível reservar um código de sala livre.");
+
+        salaAtual = idSala;
+        if (codigoGeradoTxt) codigoGeradoTxt.textContent = idSala;
+        await configurarPresencaOnDisconnect(idSala);
         conectarAoChatEPlaylist(idSala);
+        atualizarEstadoSala(`Ligado à sala ${idSala}. O áudio continua local em cada dispositivo.`);
 
         push(ref(db, 'salas/' + idSala + '/chat'), {
             tipo: "sistema",
             texto: "[SISTEMA] O utilizador " + nomeUsuarioLogado + " criou a sala."
         });
     } catch (e) {
-        console.error(e);
+        console.error("Não foi possível criar a sala:", e);
+        salaAtual = null;
+        alert("Não foi possível criar a sala. Verifica as regras e a ligação ao Firebase.");
     }
 });
 
 btnEntrarSala?.addEventListener('click', async () => {
-    if (!nomeUsuarioLogado) return;
+    if (!nomeUsuarioLogado) {
+        alert("Inicia sessão antes de entrares numa sala.");
+        return;
+    }
 
     let entrada = inputCodigoConvite?.value.trim().toUpperCase();
     if (!entrada) return;
@@ -548,29 +590,35 @@ btnEntrarSala?.addEventListener('click', async () => {
 
         if (snapshot.exists()) {
             const dadosSala = snapshot.val();
-            const participantes = dadosSala.participantes || {};
-            let novasPessoas = dadosSala.quantidadePessoas || 0;
-
-            if (!participantes[nomeUsuarioLogado]) {
-                if (novasPessoas >= LIMITE_PESSOAS) {
-                    alert("Sala cheia! O limite é de 8 pessoas.");
-                    return;
-                }
-
-                participantes[nomeUsuarioLogado] = true;
-                novasPessoas += 1;
-
-                await update(salaRef, {
-                    quantidadePessoas: novasPessoas,
-                    participantes: participantes
-                });
+            const uidAtual = auth.currentUser?.uid;
+            if (!uidAtual) {
+                alert("A sessão expirou. Inicia sessão novamente.");
+                return;
+            }
+            const presencas = { ...(dadosSala.presencas || {}), [uidAtual]: true };
+            const participantesGuardados = dadosSala.participantes && typeof dadosSala.participantes === "object"
+                ? dadosSala.participantes
+                : {};
+            const participantes = Object.fromEntries(Object.entries(participantesGuardados)
+                .filter(([, uid]) => typeof uid === "string" && Boolean(presencas[uid])));
+            participantes[nomeUsuarioLogado] = uidAtual;
+            const novasPessoas = Object.keys(participantes).length;
+            if (novasPessoas > LIMITE_PESSOAS) {
+                alert("Sala cheia! O limite é de 8 pessoas.");
+                return;
             }
 
+            await update(salaRef, {
+                quantidadePessoas: novasPessoas,
+                participantes: participantes,
+                presencas: presencas
+            });
             salaAtual = entrada;
             if (codigoGeradoTxt) codigoGeradoTxt.textContent = entrada;
 
-            configurarPresencaOnDisconnect(entrada);
+            await configurarPresencaOnDisconnect(entrada);
             conectarAoChatEPlaylist(entrada);
+            atualizarEstadoSala(`Ligado à sala ${entrada}. O áudio continua local em cada dispositivo.`);
 
             push(ref(db, 'salas/' + entrada + '/chat'), {
                 tipo: "sistema",
@@ -580,14 +628,21 @@ btnEntrarSala?.addEventListener('click', async () => {
             alert("Sala não encontrada!");
         }
     } catch (e) {
-        console.error(e);
+        console.error("Não foi possível entrar na sala:", e);
+        salaAtual = null;
+        atualizarEstadoSala("Não foi possível ligar à sala. Verifica as regras do Firebase.");
     }
 });
 
-function configurarPresencaOnDisconnect(idSala) {
-    if (!nomeUsuarioLogado) return;
+async function configurarPresencaOnDisconnect(idSala) {
+    const uid = auth.currentUser?.uid;
+    if (!nomeUsuarioLogado || !uid) return;
     const refParticipante = ref(db, `salas/${idSala}/participantes/${nomeUsuarioLogado}`);
-    onDisconnect(refParticipante).remove();
+    const refPresenca = ref(db, `salas/${idSala}/presencas/${uid}`);
+    await Promise.all([
+        onDisconnect(refParticipante).remove(),
+        onDisconnect(refPresenca).remove()
+    ]);
 }
 
 // ==========================================
@@ -595,8 +650,9 @@ function configurarPresencaOnDisconnect(idSala) {
 // ==========================================
 function conectarAoChatEPlaylist(idSala) {
     if (caixaChat) caixaChat.innerHTML = '';
+    cancelarChatAtual?.();
 
-    onChildAdded(ref(db, 'salas/' + idSala + '/chat'), (snapshot) => {
+    cancelarChatAtual = onChildAdded(ref(db, 'salas/' + idSala + '/chat'), (snapshot) => {
         const msg = snapshot.val();
         if (msg && caixaChat) {
             const div = document.createElement('div');

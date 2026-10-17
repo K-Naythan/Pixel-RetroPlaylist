@@ -1,111 +1,154 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-PT">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pixel-RetroPlaylist — Painel de Administração</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="style.css">
     <style>
-        body {
-            background: #008080;
-            padding: 20px;
-            font-family: monospace;
+        body.admin-page {
+            display: grid;
+            min-height: 100vh;
+            place-items: center;
+            padding: 18px;
+            box-sizing: border-box;
         }
+        .admin-wrap { width: min(100%, 720px); }
         .janela-admin {
             width: 100%;
-            max-width: 600px;
-            background: #c0c0c0;
-            border: 2px solid #fff;
-            box-shadow: 3px 3px 15px rgba(0,0,0,0.5);
-            margin: 0 auto 20px auto;
+            margin: 0 0 14px;
+            color: var(--ink-color);
+            background: var(--surface-color);
+            border: 2px solid var(--edge-light);
+            border-right-color: var(--edge-dark);
+            border-bottom-color: var(--edge-dark);
+            box-shadow: 3px 4px 0 var(--shadow-color);
         }
         .barra-titulo-admin {
-            background: #800000;
-            color: white;
-            padding: 6px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            color: #fff;
+            background: linear-gradient(90deg, var(--title-start), var(--title-end));
             font-weight: bold;
-            font-size: 14px;
         }
-        .conteudo-admin {
-            padding: 15px;
-        }
-        .campo-admin {
-            margin-bottom: 12px;
-        }
+        .conteudo-admin { padding: 14px; }
+        .campo-admin { margin-bottom: 12px; }
         .campo-admin label {
             display: block;
-            font-weight: bold;
             margin-bottom: 4px;
             font-size: 12px;
+            font-weight: bold;
         }
-        .campo-admin input, .campo-admin select, .campo-admin textarea {
+        .campo-admin input,
+        .campo-admin select,
+        .campo-admin textarea {
             width: 100%;
-            padding: 6px;
-            font-family: inherit;
+            padding: 7px;
+            color: var(--ink-color);
+            background: var(--panel-color);
             box-sizing: border-box;
-            border: 2px solid #808080;
+            border: 2px solid var(--edge-dark);
+            font: inherit;
         }
         .lista-painel {
-            background: #fff;
-            border: 2px solid #808080;
-            height: 150px;
+            max-height: 220px;
             overflow-y: auto;
-            padding: 5px;
-            list-style: none;
             margin: 0;
+            padding: 5px;
+            background: var(--panel-color);
+            border: 2px solid var(--edge-dark);
+            list-style: none;
         }
         .item-utilizador-lista {
-            padding: 6px;
-            border-bottom: 1px dashed #c0c0c0;
+            padding: 7px;
+            border-bottom: 1px dashed var(--edge-dark);
             font-size: 12px;
             cursor: pointer;
         }
-        .item-utilizador-lista:hover {
-            background: #000080;
-            color: white;
+        .item-utilizador-lista:hover,
+        .item-utilizador-lista[aria-selected="true"] {
+            color: #fff;
+            background: var(--title-start);
+        }
+        .admin-feedback { min-height: 1.3em; font-size: 12px; }
+        .admin-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .admin-actions .botao-retro { flex: 1 1 180px; margin: 0; }
+        .admin-home-link { color: var(--accent-strong); font-weight: bold; }
+        @media (max-width: 480px) {
+            body.admin-page { padding: 9px; }
+            .conteudo-admin { padding: 10px; }
         }
     </style>
 </head>
-<body>
-
-    <div class="janela-admin">
-        <div class="barra-titulo-admin">
-            <span>Pixel-RetroPlaylist Control Panel v1.0</span>
-        </div>
-        <div class="conteudo-admin">
-            <h2>Base de Dados de Utilizadores</h2>
-            <p style="font-size: 11px; margin-bottom: 8px;">Clique num utilizador da lista para carregar os dados dele no formulário de moderação:</p>
-            <ul id="lista-usuarios-admin" class="lista-painel"></ul>
-        </div>
-    </div>
-
-    <div class="janela-admin">
-        <div class="barra-titulo-admin">
-            <span>Ações de Moderação / Infrações</span>
-        </div>
-        <div class="conteudo-admin">
-            <div class="campo-admin">
-                <label>Utilizador Alvo:</label>
-                <input type="text" id="admin-usuario-alvo" readonly style="background: #e0e0e0;">
+<body class="admin-page" data-theme="normal">
+    <main class="admin-wrap">
+        <section id="admin-login-panel" class="janela-admin">
+            <div class="barra-titulo-admin"><span>Pixel-RetroPlaylist — Acesso administrativo</span></div>
+            <div class="conteudo-admin">
+                <h1>Entrar como Kyra</h1>
+                <p>O painel está reservado à conta <strong>kyralovonny@gmail.com</strong>.</p>
+                <form id="admin-login-form">
+                    <div class="campo-admin">
+                        <label for="admin-email">Conta autorizada</label>
+                        <input id="admin-email" name="username" type="email" autocomplete="username" value="kyralovonny@gmail.com" readonly>
+                    </div>
+                    <div class="campo-admin">
+                        <label for="admin-password">Palavra-passe da conta</label>
+                        <input id="admin-password" type="password" autocomplete="current-password" required>
+                    </div>
+                    <div class="admin-actions">
+                        <button type="submit" class="botao-retro">Entrar com e-mail</button>
+                        <button id="btn-admin-google" type="button" class="botao-retro">Continuar com Google</button>
+                    </div>
+                </form>
+                <p id="admin-auth-feedback" class="admin-feedback" role="status" aria-live="polite"></p>
+                <a class="admin-home-link" href="./">Voltar à playlist</a>
             </div>
+        </section>
 
-            <div class="campo-admin">
-                <label>Ação Corretiva:</label>
-                <select id="admin-acao-tipo">
-                    <option value="nenhuma">Nenhuma (Conta Regular)</option>
-                    <option value="aviso">Aplicar Aviso Formal</option>
-                    <option value="banimento">Aplicar Banimento Definitivo</option>
-                </select>
-            </div>
+        <div id="admin-content" class="escondido">
+            <section class="janela-admin">
+                <div class="barra-titulo-admin">
+                    <span>Pixel-RetroPlaylist — Painel da Kyra</span>
+                    <button id="btn-admin-logout" type="button" class="botao-retro">Terminar sessão</button>
+                </div>
+                <div class="conteudo-admin">
+                    <h1>Base de dados de utilizadores</h1>
+                    <p>Seleciona um utilizador para editar o estado da conta.</p>
+                    <ul id="lista-usuarios-admin" class="lista-painel" aria-label="Utilizadores"></ul>
+                    <p id="admin-data-feedback" class="admin-feedback" role="status" aria-live="polite"></p>
+                </div>
+            </section>
 
-            <div class="campo-admin">
-                <label>Motivo / Violação dos Termos:</label>
-                <textarea id="admin-motivo-texto" rows="3" placeholder="Explique detalhadamente qual regra ou termo foi violado para que o utilizador saiba o porquê..."></textarea>
-            </div>
-
-            <button id="btn-aplicar-punicao" class="botao-retro" style="width: 100%; padding: 10px; font-weight: bold;">Aplicar Alterações no Servidor</button>
+            <section class="janela-admin">
+                <div class="barra-titulo-admin"><span>Ações de moderação</span></div>
+                <div class="conteudo-admin">
+                    <div class="campo-admin">
+                        <label for="admin-usuario-alvo">Utilizador selecionado</label>
+                        <input type="text" id="admin-usuario-alvo" readonly>
+                    </div>
+                    <div class="campo-admin">
+                        <label for="admin-acao-tipo">Estado da conta</label>
+                        <select id="admin-acao-tipo">
+                            <option value="nenhuma">Regular</option>
+                            <option value="aviso">Aviso formal</option>
+                            <option value="banimento">Banimento</option>
+                        </select>
+                    </div>
+                    <div class="campo-admin">
+                        <label for="admin-motivo-texto">Motivo</label>
+                        <textarea id="admin-motivo-texto" rows="3" placeholder="Indica o motivo da ação."></textarea>
+                    </div>
+                    <button id="btn-aplicar-punicao" type="button" class="botao-retro" style="width:100%;padding:10px;font-weight:bold" disabled>Guardar alteração</button>
+                    <p id="admin-action-feedback" class="admin-feedback" role="status" aria-live="polite"></p>
+                </div>
+            </section>
         </div>
-    </div>
+    </main>
 
     <script type="module" src="admin.js"></script>
 </body>

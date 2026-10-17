@@ -14,6 +14,8 @@ export const firebaseConfig = {
     databaseURL: "https://retro-play-list-default-rtdb.firebaseio.com"
 };
 
+export const ADMIN_EMAIL = "kyralovonny@gmail.com";
+
 const app = initializeApp(firebaseConfig);
 
 export const db = getDatabase(app);
