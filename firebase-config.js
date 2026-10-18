@@ -14,7 +14,16 @@ export const firebaseConfig = {
     databaseURL: "https://retro-play-list-default-rtdb.firebaseio.com"
 };
 
-export const ADMIN_EMAIL = "kyralovonny@gmail.com";
+// Lista de emails que têm acesso ao painel de administração da aplicação.
+// Prefere usar o nó `/administradores` na base de dados para gestão dinâmica
+// (ver instruções no README). Esta lista funciona como fallback local.
+export const ADMIN_EMAILS = [
+    "trivyy777@gmail.com",
+    "kyralovonny@gmail.com"
+];
+
+// Compatibilidade com código antigo que ainda usa ADMIN_EMAIL
+export const ADMIN_EMAIL = ADMIN_EMAILS[0];
 
 const app = initializeApp(firebaseConfig);
 
