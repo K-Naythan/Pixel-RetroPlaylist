@@ -14,7 +14,9 @@ import {
     runTransaction
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 import { 
-    signInWithPopup, 
+    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword,
     deleteUser,
@@ -72,10 +74,21 @@ let cancelarHistoricoSalas = null;
 let cancelarChatAtual = null;
 
 onAuthStateChanged(auth, (utilizador) => {
-    const email = utilizador?.email?.trim().toLowerCase();
+    const email = utilizador?.email ? String(utilizador.email).trim().toLowerCase() : "";
     const eAdministradora = email === ADMIN_EMAIL.toLowerCase();
     linkAdmin?.classList.toggle('escondido', !eAdministradora);
 });
+
+(async function processRedirectResult() {
+    try {
+        const resultado = await getRedirectResult(auth);
+        if (resultado && resultado.user) {
+            await handleGoogleLoginResult(resultado);
+        }
+    } catch (e) {
+        console.warn("Erro ao processar o resultado de redirect do Google:", e);
+    }
+})();
 
 // ==========================================
 // CONTROLO DE PAINEIS E ABAS
@@ -164,7 +177,8 @@ function traduzirErroAutenticacao(erro) {
         "auth/network-request-failed": "Sem ligação à rede. Verifica a tua Internet.",
         "auth/unauthorized-domain": "Domínio não autorizado no Firebase Console.",
         "auth/popup-blocked": "O navegador bloqueou a janela do Google. Ativa os pop-ups.",
-        "auth/popup-closed-by-user": "A janela do Google foi fechada antes da conclusão."
+        "auth/popup-closed-by-user": "A janela do Google foi fechada antes da conclusão.",
+        "auth/cancelled-popup-request": "A janela do Google foi cancelada. Tenta de novo."
     };
     return mensagens[erro?.code] || (erro?.message ? erro.message : "Erro na autenticação. Tenta novamente.");
 }
@@ -272,6 +286,44 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
     }
 });
 
+async function handleGoogleLoginResult(resultado) {
+    const usuarioFirebase = resultado.user;
+    if (!usuarioFirebase) return;
+
+    const consultaPerfil = query(ref(db, 'usuarios'), orderByChild('uid'), equalTo(usuarioFirebase.uid));
+    const snapshot = await comTimeout(get(consultaPerfil));
+    const [nomeGuardado, perfilGuardado] = snapshot.exists()
+        ? Object.entries(snapshot.val())[0] || []
+        : [];
+
+    if (perfilGuardado?.statusSistema === "banimento") {
+        mostrarMensagemAutenticacao("Esta conta Google foi suspensa do sistema.");
+        return;
+    }
+
+    let dadosUsuarioSalvar = perfilGuardado || null;
+    let usuarioLimpo = perfilGuardado?.username || nomeGuardado || "";
+
+    if (!dadosUsuarioSalvar) {
+        const usernameBase = usuarioFirebase.displayName
+            ? usuarioFirebase.displayName.split(' ')[0]
+            : "USER";
+        usuarioLimpo = `${usernameBase.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "user"}-${usuarioFirebase.uid.slice(-8).toLowerCase()}`;
+        dadosUsuarioSalvar = {
+            uid: usuarioFirebase.uid,
+            email: usuarioFirebase.email || "",
+            username: usuarioLimpo,
+            statusSistema: "nenhuma",
+            motivoStatus: ""
+        };
+        await set(ref(db, `usuarios/${usuarioLimpo}`), dadosUsuarioSalvar);
+    }
+
+    nomeUsuarioLogado = usuarioLimpo.toUpperCase();
+    telaLogin?.classList.add('escondido');
+    chamarFluxoTermos(dadosUsuarioSalvar);
+}
+
 btnGoogleLogin?.addEventListener('click', async () => {
     limparMensagemAutenticacao();
     if (btnGoogleLogin) btnGoogleLogin.disabled = true;
@@ -280,42 +332,22 @@ btnGoogleLogin?.addEventListener('click', async () => {
 
     try {
         const resultado = await signInWithPopup(auth, provedorGoogle);
-        const usuarioFirebase = resultado.user;
-        const consultaPerfil = query(ref(db, 'usuarios'), orderByChild('uid'), equalTo(usuarioFirebase.uid));
-        const snapshot = await comTimeout(get(consultaPerfil));
-        const [nomeGuardado, perfilGuardado] = snapshot.exists()
-            ? Object.entries(snapshot.val())[0] || []
-            : [];
-
-        if (perfilGuardado?.statusSistema === "banimento") {
-            mostrarMensagemAutenticacao("Esta conta Google foi suspensa do sistema.");
-            return;
-        }
-
-        let dadosUsuarioSalvar = perfilGuardado || null;
-        let usuarioLimpo = perfilGuardado?.username || nomeGuardado || "";
-
-        if (!dadosUsuarioSalvar) {
-            const usernameBase = usuarioFirebase.displayName
-                ? usuarioFirebase.displayName.split(' ')[0]
-                : "USER";
-            usuarioLimpo = `${usernameBase.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "user"}-${usuarioFirebase.uid.slice(-8).toLowerCase()}`;
-            dadosUsuarioSalvar = {
-                uid: usuarioFirebase.uid,
-                email: usuarioFirebase.email || "",
-                username: usuarioLimpo,
-                statusSistema: "nenhuma",
-                motivoStatus: ""
-            };
-            await set(ref(db, `usuarios/${usuarioLimpo}`), dadosUsuarioSalvar);
-        }
-
-        nomeUsuarioLogado = usuarioLimpo.toUpperCase();
-        telaLogin?.classList.add('escondido');
-        chamarFluxoTermos(dadosUsuarioSalvar);
+        await handleGoogleLoginResult(resultado);
     } catch (e) {
         console.error("Erro no Google Login:", e);
-        mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
+
+        const fallbackCodes = new Set(['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request']);
+        if (e?.code && fallbackCodes.has(e.code)) {
+            try {
+                await signInWithRedirect(auth, provedorGoogle);
+                return;
+            } catch (redirectError) {
+                console.error('Erro ao iniciar redirect para Google:', redirectError);
+                mostrarMensagemAutenticacao(traduzirErroAutenticacao(redirectError));
+            }
+        } else {
+            mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
+        }
     } finally {
         if (btnGoogleLogin) btnGoogleLogin.disabled = false;
         if (btnEntrarSistema) btnEntrarSistema.disabled = false;
