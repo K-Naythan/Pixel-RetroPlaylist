@@ -2,10 +2,10 @@
   "rules": {
     "usuarios": {
       ".indexOn": ["uid"],
-      ".read": "auth != null && (auth.token.email == 'kyralovonny@gmail.com' || (query.orderByChild == 'uid' && query.equalTo == auth.uid))",
+      ".read": "auth != null && (auth.token.email == 'trivyy777@gmail.com' || auth.token.email == 'kyralovonny@gmail.com' || (query.orderByChild == 'uid' && query.equalTo == auth.uid))",
       "$username": {
-        ".read": "auth != null && (auth.token.email == 'kyralovonny@gmail.com' || !data.exists() || data.child('uid').val() == auth.uid)",
-        ".write": "auth != null && (auth.token.email == 'kyralovonny@gmail.com' || (!data.exists() && newData.child('uid').val() == auth.uid))",
+        ".read": "auth != null && (auth.token.email == 'trivyy777@gmail.com' || auth.token.email == 'kyralovonny@gmail.com' || !data.exists() || data.child('uid').val() == auth.uid)",
+        ".write": "auth != null && (auth.token.email == 'trivyy777@gmail.com' || auth.token.email == 'kyralovonny@gmail.com' || (!data.exists() && newData.child('uid').val() == auth.uid))",
         ".validate": "newData.hasChildren(['uid', 'statusSistema'])"
       }
     },

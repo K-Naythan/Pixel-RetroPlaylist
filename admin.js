@@ -1,4 +1,4 @@
-import { db, auth, provedorGoogle, ADMIN_EMAIL } from "./firebase-config.js";
+import { db, auth, provedorGoogle, ADMIN_EMAILS } from "./firebase-config.js";
 import { ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 import {
     onAuthStateChanged,
@@ -9,6 +9,7 @@ import {
 
 const loginPanel = document.getElementById("admin-login-panel");
 const loginForm = document.getElementById("admin-login-form");
+const adminEmailInput = document.getElementById("admin-email");
 const passwordInput = document.getElementById("admin-password");
 const loginFeedback = document.getElementById("admin-auth-feedback");
 const googleLoginButton = document.getElementById("btn-admin-google");
@@ -26,7 +27,8 @@ let unsubscribeUsers = null;
 let selectedUserKey = null;
 
 function isAuthorizedAdmin(user = auth.currentUser) {
-    return user?.email?.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+    const email = user?.email?.trim().toLowerCase();
+    return Boolean(email && ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email));
 }
 
 function showFeedback(element, message, isError = false) {
@@ -98,19 +100,20 @@ onAuthStateChanged(auth, (user) => {
 
     selectedUserKey = null;
     if (user) {
-        showFeedback(loginFeedback, `A conta ${user.email || "atual"} não tem acesso. Entra como Kyra.`, true);
+        showFeedback(loginFeedback, `A conta ${user.email || "atual"} não tem acesso. Usa uma das contas administrativas autorizadas.`, true);
     }
 });
 
 loginForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!passwordInput?.value) return;
+    const email = adminEmailInput?.value.trim().toLowerCase();
+    if (!email || !passwordInput?.value) return;
     showFeedback(loginFeedback, "A validar acesso…");
     const submitButton = loginForm.querySelector('button[type="submit"]');
     if (submitButton) submitButton.disabled = true;
 
     try {
-        const credential = await signInWithEmailAndPassword(auth, ADMIN_EMAIL, passwordInput.value);
+        const credential = await signInWithEmailAndPassword(auth, email, passwordInput.value);
         if (!isAuthorizedAdmin(credential.user)) {
             await signOut(auth);
             showFeedback(loginFeedback, "Esta conta não está autorizada para o painel.", true);
@@ -132,7 +135,7 @@ googleLoginButton?.addEventListener("click", async () => {
         const credential = await signInWithPopup(auth, provedorGoogle);
         if (!isAuthorizedAdmin(credential.user)) {
             await signOut(auth);
-            showFeedback(loginFeedback, `Só ${ADMIN_EMAIL} pode utilizar o painel.`, true);
+            showFeedback(loginFeedback, "Esta conta Google não está autorizada para o painel.", true);
         }
     } catch (error) {
         console.error("Falha no acesso Google do painel:", error);

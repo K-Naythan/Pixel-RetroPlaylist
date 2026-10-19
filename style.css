@@ -1,4 +1,8 @@
 /* --- CONFIGURAÇÕES GERAIS DO SISTEMA --- */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 body {
     background-color: #008080 !important; /* Verde-azulado clássico do desktop */
     margin: 0;
@@ -9,9 +13,7 @@ body {
     box-sizing: border-box;
 }
 
-body > .janela-windows,
-body > #painel-biblioteca,
-body > #painel-historico {
+body > .janela-windows:not(.janela-flutuante) {
     width: 100%;
     max-width: 720px;
     margin-left: auto;
@@ -28,7 +30,7 @@ h1, .titulo-principal {
 }
 
 /* --- JANELAS PADRÃO WINDOWS 98 --- */
-.janela-windows, .container-principal, #tela-login {
+.janela-windows, .container-principal {
     background: #c0c0c0;
     border-top: 2px solid #ffffff;
     border-left: 2px solid #ffffff;
@@ -600,6 +602,9 @@ body {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(285px, 0.8fr);
     grid-template-rows: auto auto;
+    grid-template-areas:
+        "player connection"
+        "player chat";
     gap: 16px;
     width: min(100%, 1120px);
     margin: 0 auto;
@@ -616,18 +621,15 @@ body {
 }
 
 .player-window {
-    grid-column: 1;
-    grid-row: 1 / span 2;
+    grid-area: player;
 }
 
 .connection-window {
-    grid-column: 2;
-    grid-row: 1;
+    grid-area: connection;
 }
 
 .chat-window {
-    grid-column: 2;
-    grid-row: 2;
+    grid-area: chat;
 }
 
 .app-window > .barra-titulo {
@@ -989,6 +991,219 @@ body {
     color: var(--muted-color);
     font-size: 10px;
     text-align: right;
+}
+
+.account-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin-left: auto;
+}
+
+.account-email {
+    max-width: 190px;
+    overflow: hidden;
+    color: var(--muted-color);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-controls .botao-retro {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.desktop-icons,
+.desktop-taskbar {
+    display: none;
+}
+
+.desktop-shell > .player-window,
+.desktop-shell > .connection-window,
+.desktop-shell > .chat-window {
+    min-width: 0;
+}
+
+.app-window.window-closed {
+    display: none !important;
+}
+
+body[data-mode="desktop"] .desktop-shell {
+    grid-template-areas:
+        "icons icons"
+        "player connection"
+        "player chat"
+        "taskbar taskbar";
+    grid-template-rows: auto 1fr 1fr auto;
+    min-height: calc(100vh - 72px);
+}
+
+body[data-mode="desktop"] .quick-nav {
+    display: none;
+}
+
+body[data-mode="desktop"] .desktop-icons {
+    display: flex;
+    grid-area: icons;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+    min-height: 82px;
+    padding: 8px;
+}
+
+.desktop-icon {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    min-width: 74px;
+    max-width: 96px;
+    margin: 0;
+    padding: 7px;
+    color: #fff;
+    background: transparent;
+    border: 1px solid transparent;
+    box-shadow: none;
+    line-height: 1.25;
+    text-shadow: 1px 1px 2px #000;
+}
+
+.desktop-icon:hover,
+.desktop-icon:focus-visible {
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px dotted rgba(255, 255, 255, 0.8);
+}
+
+.desktop-glyph {
+    display: grid;
+    width: 38px;
+    height: 34px;
+    place-items: center;
+    color: var(--ink-color);
+    background: var(--surface-raised);
+    border: 2px solid var(--edge-light);
+    border-right-color: var(--edge-dark);
+    border-bottom-color: var(--edge-dark);
+    font-size: 20px;
+    text-shadow: none;
+}
+
+body[data-mode="desktop"] .desktop-taskbar {
+    display: flex;
+    grid-area: taskbar;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 40px;
+    padding: 5px;
+    color: var(--ink-color);
+    background: var(--surface-color);
+    border: 2px solid var(--edge-light);
+    border-right-color: var(--edge-dark);
+    border-bottom-color: var(--edge-dark);
+    box-shadow: 1px 1px 0 var(--shadow-color);
+}
+
+.taskbar-theme {
+    width: 30px;
+    min-height: 28px;
+    margin: 0;
+}
+
+.taskbar-app-name {
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.taskbar-status {
+    min-width: 0;
+    margin-left: auto;
+    overflow: hidden;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+    .app-toolbar {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 8px 10px;
+    }
+
+    .quick-nav {
+        order: 3;
+        width: 100%;
+        margin-left: 0;
+        flex-wrap: wrap;
+    }
+
+    .quick-nav .botao-retro {
+        flex: 1 1 100px;
+        min-width: 0;
+        margin: 0;
+    }
+
+    .toolbar-actions {
+        margin-left: auto;
+        flex-wrap: wrap;
+    }
+
+    .toolbar-actions .botao-retro {
+        margin: 0;
+    }
+
+    .account-controls {
+        order: 4;
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .account-email {
+        max-width: min(52vw, 260px);
+    }
+
+    .desktop-shell {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "player"
+            "connection"
+            "chat";
+        gap: 12px;
+        width: 100%;
+        padding: 12px;
+    }
+
+    body[data-mode="desktop"] .desktop-shell {
+        grid-template-areas:
+            "icons"
+            "player"
+            "connection"
+            "chat"
+            "taskbar";
+        grid-template-rows: auto;
+    }
+
+    body[data-mode="desktop"] .desktop-icons {
+        min-height: 66px;
+    }
+
+    .theme-menu {
+        right: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .desktop-shell {
+        padding: 8px;
+    }
+
+    .visualizer-heading {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
 }
 
 .track-select {

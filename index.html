@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pixel-RetroPlaylist — playlists partilhadas</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <meta name="description" content="Pixel-RetroPlaylist — O teu leitor de música partilhado com o design clássico do Windows 98. Cria salas públicas ou privadas e ouve música em tempo real com amigos.">
+    <meta name="description" content="Pixel-RetroPlaylist — Um leitor de música retro com salas públicas, chat em tempo real e reprodução local no teu dispositivo.">
     <meta name="keywords" content="retro, windows 98, playlist, pixel art, musica partilhada, chat, firebase">
     <meta name="author" content="Daniel">
-    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="style.css">
 </head>
 <body data-theme="normal" data-mode="normal">
@@ -58,7 +57,7 @@
                 <div style="background: #ffffff; border-top: 2px solid #808080; border-left: 2px solid #808080; border-right: 2px solid #ffffff; border-bottom: 2px solid #ffffff; height: 150px; overflow-y: auto; padding: 8px; font-size: 11px; line-height: 14px; margin-bottom: 10px; box-sizing: border-box;">
                     <strong>1. Conduta do Utilizador:</strong> É expressamente proibido o envio de links maliciosos, ofensas no chat ou qualquer tentativa de derrubar as salas de reprodução.<br><br>
                     <strong>2. Moderação Direta:</strong> Os administradores possuem total controlo do sistema, podendo emitir avisos formais ou banimentos detalhados por e-mail/ID em caso de infração.<br><br>
-                    <strong>3. Sincronização em Cache:</strong> Ao carregar arquivos de mídia, a sincronização é gerada em tempo real para os participantes ativos na mesma sala.<br><br>
+                    <strong>3. Reprodução local:</strong> Cada participante escolhe e ouve os seus próprios ficheiros neste dispositivo. As faixas não são enviadas nem sincronizadas com a sala.<br><br>
                     <strong>4. Atualizações:</strong> Os termos podem ser modificados a qualquer momento pela equipa técnica do Pixel-RetroPlaylist.
                 </div>
                 <button id="btn-aceitar-termos" class="botao-retro" style="width: 100%; font-weight: bold; padding: 6px;">Eu Aceito os Termos e Condições</button>
@@ -80,6 +79,10 @@
             <button id="btn-temas" type="button" class="botao-retro">Temas</button>
             <button id="btn-modo-setup" type="button" class="botao-retro" aria-pressed="false">Modo Setup</button>
             <a id="link-admin" class="botao-retro admin-link escondido" href="admin.html">Painel ADM</a>
+        </div>
+        <div id="account-controls" class="account-controls escondido">
+            <span id="account-email" class="account-email"></span>
+            <button id="btn-terminar-sessao" type="button" class="botao-retro">Terminar sessão</button>
         </div>
         <div id="menu-temas" class="theme-menu escondido" role="group" aria-label="Escolher tema">
             <span class="theme-menu-title">Escolhe um tema</span>

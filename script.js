@@ -1,4 +1,4 @@
-import { db, auth, provedorGoogle, ADMIN_EMAIL } from "./firebase-config.js";
+import { db, auth, provedorGoogle, ADMIN_EMAILS } from "./firebase-config.js";
 import { 
     ref, 
     set, 
@@ -20,6 +20,7 @@ import {
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword,
     deleteUser,
+    signOut,
     onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -44,6 +45,9 @@ const inputEmail = document.getElementById('login-email');
 const inputSenha = document.getElementById('login-senha');
 const btnEntrarSistema = document.getElementById('btn-entrar-sistema');
 const btnGoogleLogin = document.getElementById('btn-google-login');
+const accountControls = document.getElementById('account-controls');
+const accountEmail = document.getElementById('account-email');
+const btnTerminarSessao = document.getElementById('btn-terminar-sessao');
 
 const painelHistorico = document.getElementById('painel-historico');
 const btnAbrirHistorico = document.getElementById('btn-abrir-historico');
@@ -72,11 +76,44 @@ let modoAtual = "login";
 const LIMITE_PESSOAS = 8;
 let cancelarHistoricoSalas = null;
 let cancelarChatAtual = null;
+let inicializacaoSessaoUid = null;
+let inicializacaoSessaoPromise = null;
+let adiarInicializacaoSessao = false;
+
+function utilizadorEAdministradora(utilizador = auth.currentUser) {
+    const email = utilizador?.email?.trim().toLowerCase();
+    return Boolean(email && ADMIN_EMAILS.some((emailAdmin) => emailAdmin.toLowerCase() === email));
+}
 
 onAuthStateChanged(auth, (utilizador) => {
-    const email = utilizador?.email ? String(utilizador.email).trim().toLowerCase() : "";
-    const eAdministradora = email === ADMIN_EMAIL.toLowerCase();
-    linkAdmin?.classList.toggle('escondido', !eAdministradora);
+    linkAdmin?.classList.toggle('escondido', !utilizadorEAdministradora(utilizador));
+    accountControls?.classList.toggle('escondido', !utilizador);
+    if (accountEmail) {
+        accountEmail.textContent = utilizador?.displayName || utilizador?.email || "";
+    }
+
+    if (!utilizador) {
+        nomeUsuarioLogado = null;
+        inicializacaoSessaoUid = null;
+        inicializacaoSessaoPromise = null;
+        salaAtual = null;
+        cancelarChatAtual?.();
+        cancelarChatAtual = null;
+        cancelarHistoricoSalas?.();
+        cancelarHistoricoSalas = null;
+        if (codigoGeradoTxt) codigoGeradoTxt.textContent = "—";
+        if (caixaChat) caixaChat.replaceChildren();
+        atualizarEstadoSala("Entra numa sala para abrir o chat.");
+        telaTermos?.classList.add('escondido');
+        telaLogin?.classList.remove('escondido');
+        return;
+    }
+
+    if (adiarInicializacaoSessao) return;
+    void iniciarSessaoAutenticada(utilizador).catch((erro) => {
+        console.error("Não foi possível restaurar a sessão:", erro);
+        mostrarErroDeSessao(erro);
+    });
 });
 
 (async function processRedirectResult() {
@@ -87,6 +124,7 @@ onAuthStateChanged(auth, (utilizador) => {
         }
     } catch (e) {
         console.warn("Erro ao processar o resultado de redirect do Google:", e);
+        mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
     }
 })();
 
@@ -149,6 +187,7 @@ function mostrarMensagemAutenticacao(mensagem, tipo = "erro") {
     authFeedback.textContent = mensagem;
     authFeedback.hidden = false;
     authFeedback.style.display = "block";
+    authFeedback.dataset.tipo = tipo;
     authFeedback.style.color = tipo === "erro" ? "#ff0000" : (tipo === "sucesso" ? "#008000" : "#0000ff");
     authFeedback.style.fontSize = "11px";
     authFeedback.style.marginTop = "6px";
@@ -159,6 +198,7 @@ function limparMensagemAutenticacao() {
     authFeedback.textContent = "";
     authFeedback.hidden = true;
     authFeedback.style.display = "none";
+    delete authFeedback.dataset.tipo;
 }
 
 function traduzirErroAutenticacao(erro) {
@@ -178,9 +218,20 @@ function traduzirErroAutenticacao(erro) {
         "auth/unauthorized-domain": "Domínio não autorizado no Firebase Console.",
         "auth/popup-blocked": "O navegador bloqueou a janela do Google. Ativa os pop-ups.",
         "auth/popup-closed-by-user": "A janela do Google foi fechada antes da conclusão.",
-        "auth/cancelled-popup-request": "A janela do Google foi cancelada. Tenta de novo."
+        "auth/cancelled-popup-request": "Já existe um pedido Google aberto. Fecha-o e tenta novamente.",
+        "auth/web-storage-unsupported": "O navegador bloqueou o armazenamento necessário para autenticar.",
+        "auth/operation-not-supported-in-this-environment": "Este navegador não permite abrir a janela Google. Tenta novamente no navegador principal.",
+        "auth/account-exists-with-different-credential": "Este e-mail já está associado a outro método de entrada. Usa o método com que criaste a conta."
     };
     return mensagens[erro?.code] || (erro?.message ? erro.message : "Erro na autenticação. Tenta novamente.");
+}
+
+function mostrarErroDeSessao(erro) {
+    if (erro?.code === "PERMISSION_DENIED" || erro?.code === "database/permission-denied") {
+        mostrarMensagemAutenticacao("A conta foi autenticada, mas o Firebase não permitiu carregar o perfil. Confirma as regras de database.rules.json.");
+        return;
+    }
+    mostrarMensagemAutenticacao(traduzirErroAutenticacao(erro));
 }
 
 // Helper para timeout em promessas (Blindagem contra travamentos)
@@ -194,9 +245,76 @@ function comTimeout(promessa, ms = 12000) {
 // ==========================================
 // FLUXO DE AUTENTICAÇÃO (SUBMIT E GOOGLE)
 // ==========================================
+async function carregarOuCriarPerfil(utilizadorFirebase) {
+    const consultaPerfil = query(ref(db, 'usuarios'), orderByChild('uid'), equalTo(utilizadorFirebase.uid));
+    const snapshot = await comTimeout(get(consultaPerfil));
+    if (snapshot.exists()) {
+        const [chave, perfil] = Object.entries(snapshot.val())[0] || [];
+        if (chave && perfil) return { chave, perfil };
+    }
+
+    const nomeBase = utilizadorFirebase.displayName?.split(/\s+/)[0]
+        || utilizadorFirebase.email?.split("@")[0]
+        || "user";
+    const nomeLimpo = nomeBase.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "user";
+    const perfilNovo = {
+        uid: utilizadorFirebase.uid,
+        email: utilizadorFirebase.email || "",
+        username: `${nomeLimpo}-${utilizadorFirebase.uid.slice(-8).toLowerCase()}`,
+        statusSistema: "nenhuma",
+        motivoStatus: ""
+    };
+    const chave = `user-${utilizadorFirebase.uid}`;
+    const resultado = await comTimeout(runTransaction(
+        ref(db, `usuarios/${chave}`),
+        (perfilExistente) => {
+            if (perfilExistente === null) return perfilNovo;
+            if (perfilExistente.uid === utilizadorFirebase.uid) return perfilExistente;
+            return;
+        },
+        { applyLocally: false }
+    ));
+    const perfilGuardado = resultado.snapshot?.val();
+    if (!perfilGuardado || perfilGuardado.uid !== utilizadorFirebase.uid) {
+        throw new Error("Não foi possível criar um perfil seguro para esta conta.");
+    }
+    return { chave, perfil: perfilGuardado };
+}
+
+function iniciarSessaoAutenticada(utilizadorFirebase) {
+    if (inicializacaoSessaoUid === utilizadorFirebase.uid && inicializacaoSessaoPromise) {
+        return inicializacaoSessaoPromise;
+    }
+
+    inicializacaoSessaoUid = utilizadorFirebase.uid;
+    const promessa = (async () => {
+        const { perfil } = await carregarOuCriarPerfil(utilizadorFirebase);
+        if (auth.currentUser?.uid !== utilizadorFirebase.uid) return false;
+
+        if (perfil.statusSistema === "banimento") {
+            mostrarMensagemAutenticacao("Esta conta está suspensa. Motivo: " + (perfil.motivoStatus || "Violação dos termos."));
+            await signOut(auth);
+            return false;
+        }
+
+        nomeUsuarioLogado = String(perfil.username || utilizadorFirebase.email?.split("@")[0] || "USER").toUpperCase();
+        limparMensagemAutenticacao();
+        telaLogin?.classList.add('escondido');
+        chamarFluxoTermos(perfil);
+        return true;
+    })().finally(() => {
+        if (inicializacaoSessaoPromise === promessa) {
+            inicializacaoSessaoUid = null;
+            inicializacaoSessaoPromise = null;
+        }
+    });
+    inicializacaoSessaoPromise = promessa;
+    return promessa;
+}
+
 formAutenticacao?.addEventListener('submit', async (evento) => {
     evento.preventDefault();
-    const email = inputEmail?.value.trim();
+    const email = inputEmail?.value.trim().toLowerCase();
     const senha = inputSenha?.value ?? "";
     const usuario = inputUsuario ? inputUsuario.value.trim().toLowerCase() : "";
 
@@ -210,6 +328,11 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
         return;
     }
 
+    if (modoAtual === "registro" && !/^[a-z0-9_-]{3,32}$/.test(usuario)) {
+        mostrarMensagemAutenticacao("O nome de utilizador deve ter 3–32 caracteres: letras sem acentos, números, hífen ou sublinhado.");
+        return;
+    }
+
     if (btnEntrarSistema) btnEntrarSistema.disabled = true;
     if (btnGoogleLogin) btnGoogleLogin.disabled = true;
     if (btnEntrarSistema) btnEntrarSistema.textContent = modoAtual === "registro" ? "A criar conta…" : "A iniciar sessão…";
@@ -218,35 +341,15 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
     try {
         if (modoAtual === "login") {
             const credencial = await comTimeout(signInWithEmailAndPassword(auth, email, senha));
-            const uid = credencial.user.uid;
-
-            const consultaPerfil = query(
-                ref(db, 'usuarios'),
-                orderByChild('uid'),
-                equalTo(uid)
-            );
-            const snapshot = await comTimeout(get(consultaPerfil));
-            let nomeEncontrado = null;
-
-            if (snapshot.exists()) {
-                const [nome, perfil] = Object.entries(snapshot.val())[0] || [];
-                if (nome && perfil) {
-                    nomeEncontrado = perfil.username || nome;
-                    if (perfil.statusSistema === "banimento") {
-                        throw { code: "auth/banned", message: perfil.motivoStatus };
-                    }
-                }
-            }
-
-            nomeUsuarioLogado = nomeEncontrado ? nomeEncontrado.toUpperCase() : email.split('@')[0].toUpperCase();
-            telaLogin?.classList.add('escondido');
-            chamarFluxoTermos({ statusSistema: "nenhuma" });
+            await iniciarSessaoAutenticada(credencial.user);
 
         } else {
             const userRef = ref(db, 'usuarios/' + usuario);
-            const credencial = await comTimeout(createUserWithEmailAndPassword(auth, email, senha));
+            let credencial;
+            adiarInicializacaoSessao = true;
 
             try {
+                credencial = await comTimeout(createUserWithEmailAndPassword(auth, email, senha));
                 const resultado = await comTimeout(runTransaction(userRef, (perfilAtual) => {
                     if (perfilAtual !== null) return;
                     return {
@@ -263,22 +366,17 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
                     mostrarMensagemAutenticacao("Este nome de utilizador já está registado.");
                     return;
                 }
+                await iniciarSessaoAutenticada(credencial.user);
             } catch (erroPerfil) {
-                await deleteUser(credencial.user).catch(() => {});
+                if (credencial?.user) await deleteUser(credencial.user).catch(() => {});
                 throw erroPerfil;
+            } finally {
+                adiarInicializacaoSessao = false;
             }
-
-            nomeUsuarioLogado = usuario.toUpperCase();
-            telaLogin?.classList.add('escondido');
-            chamarFluxoTermos({ statusSistema: "nenhuma" });
         }
     } catch (e) {
         console.error("Erro no formulário:", e);
-        if (e.code === "auth/banned") {
-            mostrarMensagemAutenticacao("Esta conta está suspensa. Motivo: " + (e.message || "Violação dos termos."));
-        } else {
-            mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
-        }
+        mostrarErroDeSessao(e);
     } finally {
         if (btnEntrarSistema) btnEntrarSistema.disabled = false;
         if (btnGoogleLogin) btnGoogleLogin.disabled = false;
@@ -287,41 +385,7 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
 });
 
 async function handleGoogleLoginResult(resultado) {
-    const usuarioFirebase = resultado.user;
-    if (!usuarioFirebase) return;
-
-    const consultaPerfil = query(ref(db, 'usuarios'), orderByChild('uid'), equalTo(usuarioFirebase.uid));
-    const snapshot = await comTimeout(get(consultaPerfil));
-    const [nomeGuardado, perfilGuardado] = snapshot.exists()
-        ? Object.entries(snapshot.val())[0] || []
-        : [];
-
-    if (perfilGuardado?.statusSistema === "banimento") {
-        mostrarMensagemAutenticacao("Esta conta Google foi suspensa do sistema.");
-        return;
-    }
-
-    let dadosUsuarioSalvar = perfilGuardado || null;
-    let usuarioLimpo = perfilGuardado?.username || nomeGuardado || "";
-
-    if (!dadosUsuarioSalvar) {
-        const usernameBase = usuarioFirebase.displayName
-            ? usuarioFirebase.displayName.split(' ')[0]
-            : "USER";
-        usuarioLimpo = `${usernameBase.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "user"}-${usuarioFirebase.uid.slice(-8).toLowerCase()}`;
-        dadosUsuarioSalvar = {
-            uid: usuarioFirebase.uid,
-            email: usuarioFirebase.email || "",
-            username: usuarioLimpo,
-            statusSistema: "nenhuma",
-            motivoStatus: ""
-        };
-        await set(ref(db, `usuarios/${usuarioLimpo}`), dadosUsuarioSalvar);
-    }
-
-    nomeUsuarioLogado = usuarioLimpo.toUpperCase();
-    telaLogin?.classList.add('escondido');
-    chamarFluxoTermos(dadosUsuarioSalvar);
+    if (resultado?.user) await iniciarSessaoAutenticada(resultado.user);
 }
 
 btnGoogleLogin?.addEventListener('click', async () => {
@@ -336,7 +400,11 @@ btnGoogleLogin?.addEventListener('click', async () => {
     } catch (e) {
         console.error("Erro no Google Login:", e);
 
-        const fallbackCodes = new Set(['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request']);
+        const fallbackCodes = new Set([
+            'auth/popup-blocked',
+            'auth/web-storage-unsupported',
+            'auth/operation-not-supported-in-this-environment'
+        ]);
         if (e?.code && fallbackCodes.has(e.code)) {
             try {
                 await signInWithRedirect(auth, provedorGoogle);
@@ -346,11 +414,24 @@ btnGoogleLogin?.addEventListener('click', async () => {
                 mostrarMensagemAutenticacao(traduzirErroAutenticacao(redirectError));
             }
         } else {
-            mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
+            mostrarErroDeSessao(e);
         }
     } finally {
         if (btnGoogleLogin) btnGoogleLogin.disabled = false;
         if (btnEntrarSistema) btnEntrarSistema.disabled = false;
+    }
+});
+
+btnTerminarSessao?.addEventListener('click', async () => {
+    btnTerminarSessao.disabled = true;
+    try {
+        if (salaAtual) await sairDaSalaAtual();
+        await signOut(auth);
+    } catch (erro) {
+        console.error("Não foi possível terminar a sessão:", erro);
+        mostrarErroDeSessao(erro);
+    } finally {
+        btnTerminarSessao.disabled = false;
     }
 });
 
@@ -377,7 +458,7 @@ function ouvirHistoricoSalas() {
         listaSalasHistorico.innerHTML = '';
         let encontrouSalas = false;
         const nomeAtual = String(nomeUsuarioLogado || '').trim().toLowerCase();
-        const eAdministradora = auth.currentUser?.email?.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+        const eAdministradora = utilizadorEAdministradora();
 
         if (snapshot.exists()) {
             const salas = snapshot.val();

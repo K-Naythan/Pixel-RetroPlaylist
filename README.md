@@ -38,13 +38,13 @@ A configuração Web partilhada pelo site e pelo painel está em `firebase-confi
 
 - Os métodos **E-mail/palavra-passe** e **Google** estão ativados em Authentication.
 - `k-naythan.github.io` está na lista de domínios autorizados de Authentication. Para desenvolvimento no Replit, autoriza também o domínio de pré-visualização usado.
-- O painel de administração é `admin.html` (na página publicada, `/admin.html`) e aceita apenas a conta `kyralovonny@gmail.com`.
+- O painel de administração é `admin.html` (na página publicada, `/admin.html`) e aceita as contas listadas em `ADMIN_EMAILS` no `firebase-config.js`. Mantém a mesma lista sincronizada nas regras de `database.rules.json`.
 - Aplica as regras de `database.rules.json` no Realtime Database para proteger a lista e as alterações de utilizadores. Se já existirem regras para outros dados, combina-as em vez de substituir o conjunto inteiro sem revisão.
-- As regras fornecidas permitem operações autenticadas em `salas` para manter as salas e o chat existentes; os perfis de `usuarios` são limitados ao respetivo utilizador e à conta administradora.
+- As regras fornecidas permitem operações autenticadas em `salas` para manter as salas e o chat existentes; os perfis de `usuarios` são limitados ao respetivo utilizador e às contas administrativas autorizadas.
 
 A configuração Web, incluindo a chave `apiKey`, é enviada ao navegador e não é um segredo. Protege os dados com regras do Firebase e restrições da chave, não com valores secretos no código do cliente.
 
-O login e o registo são tratados no navegador; o formulário não deve enviar credenciais na URL. Depois de aplicar as regras, testa o registo de uma conta nova e o login antes de publicar.
+O login e o registo são tratados no navegador; o formulário não deve enviar credenciais na URL. A sessão iniciada é restaurada automaticamente neste navegador; usa **Terminar sessão** para sair ou trocar de conta. Depois de aplicar as regras, testa o registo de uma conta nova e o login antes de publicar.
 
 ## Áudio e temas
 
