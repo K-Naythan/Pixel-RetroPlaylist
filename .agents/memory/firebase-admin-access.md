@@ -3,8 +3,8 @@ name: Firebase administrator access
 description: Keep client-side administrator accounts aligned with Realtime Database authorization.
 ---
 
-The client-side administrator allowlist and Realtime Database security rules are separate policy sources. An account can pass the app's admin check and still be denied by Firebase, or the database can grant access to an account the app hides from the admin UI.
+The administrator panel is entered through the `/admin-painel` chat command. Only the two approved administrator accounts may use that command; the client allowlist and Realtime Database security rules are separate policy sources.
 
 **Why:** the imported app's configured admin list and database rules disagreed, so the panel's account check did not match database access.
 
-**How to apply:** when administrator membership changes, update the client allowlist, the database rules, and the admin-facing copy together.
+**How to apply:** keep command access, the client allowlist, database rules, and admin-facing copy aligned when changing administrators or panel entry behavior.

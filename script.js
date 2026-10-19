@@ -48,12 +48,12 @@ const btnGoogleLogin = document.getElementById('btn-google-login');
 const accountControls = document.getElementById('account-controls');
 const accountEmail = document.getElementById('account-email');
 const btnTerminarSessao = document.getElementById('btn-terminar-sessao');
+const ADMIN_COMMAND_SESSION_KEY = 'pixel-retro-admin-command-uid';
 
 const painelHistorico = document.getElementById('painel-historico');
 const btnAbrirHistorico = document.getElementById('btn-abrir-historico');
 const btnFecharHistorico = document.getElementById('btn-fechar-historico');
 const listaSalasHistorico = document.getElementById('lista-salas-historico');
-const linkAdmin = document.getElementById('link-admin');
 const desktopStatus = document.getElementById('desktop-status');
 const estadoSala = document.getElementById('estado-sala');
 
@@ -86,7 +86,6 @@ function utilizadorEAdministradora(utilizador = auth.currentUser) {
 }
 
 onAuthStateChanged(auth, (utilizador) => {
-    linkAdmin?.classList.toggle('escondido', !utilizadorEAdministradora(utilizador));
     accountControls?.classList.toggle('escondido', !utilizador);
     if (accountEmail) {
         accountEmail.textContent = utilizador?.displayName || utilizador?.email || "";
@@ -124,7 +123,7 @@ onAuthStateChanged(auth, (utilizador) => {
         }
     } catch (e) {
         console.warn("Erro ao processar o resultado de redirect do Google:", e);
-        mostrarMensagemAutenticacao(traduzirErroAutenticacao(e));
+        mostrarErroDeSessao(e);
     }
 })();
 
@@ -227,8 +226,13 @@ function traduzirErroAutenticacao(erro) {
 }
 
 function mostrarErroDeSessao(erro) {
-    if (erro?.code === "PERMISSION_DENIED" || erro?.code === "database/permission-denied") {
+    const detalheErro = `${erro?.code || ""} ${erro?.message || ""}`;
+    if (/PERMISSION_DENIED|database\/permission-denied/i.test(detalheErro)) {
         mostrarMensagemAutenticacao("A conta foi autenticada, mas o Firebase não permitiu carregar o perfil. Confirma as regras de database.rules.json.");
+        return;
+    }
+    if (erro?.code === "auth/unauthorized-domain") {
+        mostrarMensagemAutenticacao(`O domínio ${window.location.hostname} não está autorizado em Firebase Authentication > Authorized domains.`);
         return;
     }
     mostrarMensagemAutenticacao(traduzirErroAutenticacao(erro));
@@ -395,6 +399,10 @@ btnGoogleLogin?.addEventListener('click', async () => {
     mostrarMensagemAutenticacao("A abrir autenticação Google…", "informacao");
 
     try {
+        if (auth.currentUser) {
+            await iniciarSessaoAutenticada(auth.currentUser);
+            return;
+        }
         const resultado = await signInWithPopup(auth, provedorGoogle);
         await handleGoogleLoginResult(resultado);
     } catch (e) {
@@ -411,7 +419,7 @@ btnGoogleLogin?.addEventListener('click', async () => {
                 return;
             } catch (redirectError) {
                 console.error('Erro ao iniciar redirect para Google:', redirectError);
-                mostrarMensagemAutenticacao(traduzirErroAutenticacao(redirectError));
+                mostrarErroDeSessao(redirectError);
             }
         } else {
             mostrarErroDeSessao(e);
@@ -796,6 +804,30 @@ function adicionarAvisoSistema(texto) {
 
 btnEnviarMensagem?.addEventListener('click', () => {
     const texto = inputMensagem?.value.trim();
+    if (!texto) return;
+
+    if (texto.toLowerCase() === "/admin-painel") {
+        if (inputMensagem) inputMensagem.value = "";
+        const utilizadorAtual = auth.currentUser;
+        if (!utilizadorEAdministradora(utilizadorAtual)) {
+            adicionarAvisoSistema(utilizadorAtual
+                ? "Acesso negado. Só as contas TRIV e KYRA podem abrir o painel administrativo."
+                : "Inicia sessão com a conta TRIV ou KYRA para abrir o painel administrativo.");
+            return;
+        }
+
+        try {
+            sessionStorage.setItem(ADMIN_COMMAND_SESSION_KEY, utilizadorAtual.uid);
+        } catch (erro) {
+            console.error("Não foi possível guardar o acesso do comando:", erro);
+            adicionarAvisoSistema("O navegador bloqueou o acesso ao painel. Permite o armazenamento deste site e tenta novamente.");
+            return;
+        }
+
+        window.location.assign("admin.html");
+        return;
+    }
+
     if (texto && salaAtual && nomeUsuarioLogado) {
         push(ref(db, 'salas/' + salaAtual + '/chat'), {
             usuario: nomeUsuarioLogado,
@@ -805,6 +837,9 @@ btnEnviarMensagem?.addEventListener('click', () => {
     }
 });
 
-inputMensagem?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') btnEnviarMensagem?.click();
+inputMensagem?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        btnEnviarMensagem?.click();
+    }
 });

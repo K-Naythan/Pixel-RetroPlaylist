@@ -558,11 +558,6 @@ body {
     flex: 0 0 auto;
 }
 
-.admin-link {
-    color: var(--ink-color);
-    text-decoration: none;
-}
-
 .theme-menu {
     position: absolute;
     top: calc(100% + 6px);

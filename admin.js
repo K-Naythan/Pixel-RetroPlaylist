@@ -2,17 +2,11 @@ import { db, auth, provedorGoogle, ADMIN_EMAILS } from "./firebase-config.js";
 import { ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 import {
     onAuthStateChanged,
-    signInWithEmailAndPassword,
-    signInWithPopup,
     signOut
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const loginPanel = document.getElementById("admin-login-panel");
-const loginForm = document.getElementById("admin-login-form");
-const adminEmailInput = document.getElementById("admin-email");
-const passwordInput = document.getElementById("admin-password");
 const loginFeedback = document.getElementById("admin-auth-feedback");
-const googleLoginButton = document.getElementById("btn-admin-google");
 const adminContent = document.getElementById("admin-content");
 const logoutButton = document.getElementById("btn-admin-logout");
 const userList = document.getElementById("lista-usuarios-admin");
@@ -22,6 +16,7 @@ const reasonInput = document.getElementById("admin-motivo-texto");
 const applyButton = document.getElementById("btn-aplicar-punicao");
 const dataFeedback = document.getElementById("admin-data-feedback");
 const actionFeedback = document.getElementById("admin-action-feedback");
+const ADMIN_COMMAND_SESSION_KEY = "pixel-retro-admin-command-uid";
 
 let unsubscribeUsers = null;
 let selectedUserKey = null;
@@ -29,6 +24,15 @@ let selectedUserKey = null;
 function isAuthorizedAdmin(user = auth.currentUser) {
     const email = user?.email?.trim().toLowerCase();
     return Boolean(email && ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email));
+}
+
+function enteredThroughAdminCommand(user) {
+    if (!isAuthorizedAdmin(user)) return false;
+    try {
+        return sessionStorage.getItem(ADMIN_COMMAND_SESSION_KEY) === user.uid;
+    } catch {
+        return false;
+    }
 }
 
 function showFeedback(element, message, isError = false) {
@@ -87,7 +91,7 @@ function startUserListener() {
 }
 
 onAuthStateChanged(auth, (user) => {
-    const authorized = isAuthorizedAdmin(user);
+    const authorized = enteredThroughAdminCommand(user);
     loginPanel?.classList.toggle("escondido", authorized);
     adminContent?.classList.toggle("escondido", !authorized);
     stopUserListener();
@@ -99,53 +103,20 @@ onAuthStateChanged(auth, (user) => {
     }
 
     selectedUserKey = null;
-    if (user) {
-        showFeedback(loginFeedback, `A conta ${user.email || "atual"} não tem acesso. Usa uma das contas administrativas autorizadas.`, true);
-    }
-});
-
-loginForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const email = adminEmailInput?.value.trim().toLowerCase();
-    if (!email || !passwordInput?.value) return;
-    showFeedback(loginFeedback, "A validar acesso…");
-    const submitButton = loginForm.querySelector('button[type="submit"]');
-    if (submitButton) submitButton.disabled = true;
-
-    try {
-        const credential = await signInWithEmailAndPassword(auth, email, passwordInput.value);
-        if (!isAuthorizedAdmin(credential.user)) {
-            await signOut(auth);
-            showFeedback(loginFeedback, "Esta conta não está autorizada para o painel.", true);
-        } else {
-            passwordInput.value = "";
-        }
-    } catch (error) {
-        console.error("Falha de autenticação do painel:", error);
-        showFeedback(loginFeedback, "Não foi possível entrar. Confirma a palavra-passe, a conta e a ligação ao Firebase.", true);
-    } finally {
-        if (submitButton) submitButton.disabled = false;
-    }
-});
-
-googleLoginButton?.addEventListener("click", async () => {
-    showFeedback(loginFeedback, "A abrir o acesso Google…");
-    googleLoginButton.disabled = true;
-    try {
-        const credential = await signInWithPopup(auth, provedorGoogle);
-        if (!isAuthorizedAdmin(credential.user)) {
-            await signOut(auth);
-            showFeedback(loginFeedback, "Esta conta Google não está autorizada para o painel.", true);
-        }
-    } catch (error) {
-        console.error("Falha no acesso Google do painel:", error);
-        showFeedback(loginFeedback, "Não foi possível autenticar com o Google. Tenta novamente no navegador principal.", true);
-    } finally {
-        googleLoginButton.disabled = false;
-    }
+    const message = !user
+        ? "Inicia sessão na playlist com a conta TRIV ou KYRA e escreve /admin-painel no chat."
+        : isAuthorizedAdmin(user)
+            ? "Abre o painel pela playlist com o comando /admin-painel no chat."
+            : `A conta ${user.email || "atual"} não tem acesso. Só TRIV e KYRA estão autorizadas.`;
+    showFeedback(loginFeedback, message, true);
 });
 
 logoutButton?.addEventListener("click", async () => {
+    try {
+        sessionStorage.removeItem(ADMIN_COMMAND_SESSION_KEY);
+    } catch {
+        // The authentication check still protects access if storage is unavailable.
+    }
     await signOut(auth);
     selectedUserKey = null;
     if (userTargetInput) userTargetInput.value = "";

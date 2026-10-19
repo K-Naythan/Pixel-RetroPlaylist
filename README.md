@@ -38,7 +38,7 @@ A configuração Web partilhada pelo site e pelo painel está em `firebase-confi
 
 - Os métodos **E-mail/palavra-passe** e **Google** estão ativados em Authentication.
 - `k-naythan.github.io` está na lista de domínios autorizados de Authentication. Para desenvolvimento no Replit, autoriza também o domínio de pré-visualização usado.
-- O painel de administração é `admin.html` (na página publicada, `/admin.html`) e aceita as contas listadas em `ADMIN_EMAILS` no `firebase-config.js`. Mantém a mesma lista sincronizada nas regras de `database.rules.json`.
+- O painel administrativo é aberto pelo comando `/admin-painel` no chat da playlist. Só TRIV (`trivyy777@gmail.com`) e KYRA (`kyralovonny@gmail.com`) podem usá-lo; o painel valida a conta e a origem do comando. Mantém `ADMIN_EMAILS` em `firebase-config.js` sincronizado com `database.rules.json`.
 - Aplica as regras de `database.rules.json` no Realtime Database para proteger a lista e as alterações de utilizadores. Se já existirem regras para outros dados, combina-as em vez de substituir o conjunto inteiro sem revisão.
 - As regras fornecidas permitem operações autenticadas em `salas` para manter as salas e o chat existentes; os perfis de `usuarios` são limitados ao respetivo utilizador e às contas administrativas autorizadas.
 
