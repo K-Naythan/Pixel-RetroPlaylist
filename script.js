@@ -21,7 +21,9 @@ import {
     signInWithEmailAndPassword,
     deleteUser,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    setPersistence,
+    browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 import "./audio-player.js";
@@ -80,10 +82,70 @@ let inicializacaoSessaoUid = null;
 let inicializacaoSessaoPromise = null;
 let adiarInicializacaoSessao = false;
 
+// Chave usada no localStorage para sincronizar sessão entre separadores
+const SESSION_KEY = 'pixel-retro-active-uid';
+
 function utilizadorEAdministradora(utilizador = auth.currentUser) {
     const email = utilizador?.email?.trim().toLowerCase();
     return Boolean(email && ADMIN_EMAILS.some((emailAdmin) => emailAdmin.toLowerCase() === email));
 }
+
+// Garantir persistência local do Auth (compartilha sessão entre separadores)
+(async function initAuthPersistence() {
+    try {
+        await setPersistence(auth, browserLocalPersistence);
+    } catch (e) {
+        console.warn("Não foi possível definir a persistência local do Auth:", e);
+    }
+})();
+
+// Sincronização de sessão no localStorage
+function persistSessionForUser(user) {
+    try {
+        if (!user) return;
+        localStorage.setItem(SESSION_KEY, user.uid);
+        // também gravamos meta para debug/visualização
+        localStorage.setItem(SESSION_KEY + ':meta', JSON.stringify({ displayName: user.displayName, email: user.email }));
+        // forçar evento de storage em outros separadores
+        localStorage.setItem(SESSION_KEY + ':updatedAt', String(Date.now()));
+    } catch (e) {
+        console.warn('Falha ao persistir sessão no localStorage:', e);
+    }
+}
+
+function clearPersistedSession() {
+    try {
+        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(SESSION_KEY + ':meta');
+        localStorage.setItem(SESSION_KEY + ':updatedAt', String(Date.now()));
+    } catch (e) {
+        console.warn('Falha ao limpar sessão persistida:', e);
+    }
+}
+
+// Ouvir alterações de sessão vindas de outros separadores
+window.addEventListener('storage', (e) => {
+    if (!e.key) return;
+    if (e.key === SESSION_KEY || e.key === (SESSION_KEY + ':updatedAt')) {
+        const otherUid = localStorage.getItem(SESSION_KEY);
+        const currentUid = auth.currentUser?.uid;
+
+        // Se outro separador iniciou sessão com um UID diferente -> encerrar sessão local
+        if (otherUid && currentUid && otherUid !== currentUid) {
+            console.info('Outra sessão foi iniciada noutro separador; a sessão atual será encerrada.');
+            // Não aguardamos — o onAuthStateChanged tratará da UI
+            signOut(auth).catch((err) => console.warn('Erro ao terminar sessão para sincronizar:', err));
+            return;
+        }
+
+        // Se outro separador encerrou sessão (otherUid === null) -> encerrar sessão local também
+        if (!otherUid && currentUid) {
+            console.info('A sessão foi terminada noutro separador; a sessão atual será encerrada.');
+            signOut(auth).catch((err) => console.warn('Erro ao terminar sessão na sincronização:', err));
+            return;
+        }
+    }
+});
 
 onAuthStateChanged(auth, (utilizador) => {
     accountControls?.classList.toggle('escondido', !utilizador);
@@ -105,8 +167,14 @@ onAuthStateChanged(auth, (utilizador) => {
         atualizarEstadoSala("Entra numa sala para abrir o chat.");
         telaTermos?.classList.add('escondido');
         telaLogin?.classList.remove('escondido');
+        // limpar sessão persistida se existia (para ficar consistente)
+        clearPersistedSession();
         return;
     }
+
+    // Quando houver um utilizador válido, persistimos a sua sessão para que outros separadores
+    // saibam que esta conta está ativa.
+    persistSessionForUser(utilizador);
 
     if (adiarInicializacaoSessao) return;
     void iniciarSessaoAutenticada(utilizador).catch((erro) => {
@@ -305,6 +373,14 @@ function iniciarSessaoAutenticada(utilizadorFirebase) {
         limparMensagemAutenticacao();
         telaLogin?.classList.add('escondido');
         chamarFluxoTermos(perfil);
+
+        // Persistir sessão para sincronizar com outros separadores
+        try {
+            persistSessionForUser(utilizadorFirebase);
+        } catch (e) {
+            console.warn('Não foi possível persistir sessão após autenticação:', e);
+        }
+
         return true;
     })().finally(() => {
         if (inicializacaoSessaoPromise === promessa) {
@@ -435,6 +511,8 @@ btnTerminarSessao?.addEventListener('click', async () => {
     try {
         if (salaAtual) await sairDaSalaAtual();
         await signOut(auth);
+        // Limpar sessão partilhada
+        clearPersistedSession();
     } catch (erro) {
         console.error("Não foi possível terminar a sessão:", erro);
         mostrarErroDeSessao(erro);
