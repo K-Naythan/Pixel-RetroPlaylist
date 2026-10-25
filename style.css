@@ -257,6 +257,34 @@ hr {
     line-height: 1.5;
 }
 
+.login-method-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.login-method-tabs .botao-retro,
+.auth-tab {
+    flex: 1;
+    min-height: 36px;
+}
+
+.login-method-tabs [aria-pressed="true"],
+.auth-tab[aria-pressed="true"] {
+    background: #e0e0e0;
+    font-weight: bold;
+}
+
+.site-account-notice {
+    padding: 8px;
+    margin: 10px 0 0;
+    border: 1px solid #805000;
+    background: #fff4d6;
+    color: #4c3500;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
 .config-notice {
     border-left: 4px solid #805000;
     background: #fff4d6;
@@ -1008,6 +1036,12 @@ body {
 .account-controls .botao-retro {
     flex: 0 0 auto;
     margin: 0;
+}
+
+#account-auth-feedback {
+    max-width: 210px;
+    color: var(--muted-color);
+    font-size: 11px;
 }
 
 .desktop-icons,

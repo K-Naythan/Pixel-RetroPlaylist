@@ -34,17 +34,21 @@ python3 -m http.server 5000 --bind 0.0.0.0
 
 ## Configuração Firebase
 
-A configuração Web partilhada pelo site e pelo painel está em `firebase-config.js`. Confirma no Firebase Console que:
+A configuração Web partilhada pelo site e pelo painel está em `firebase-config.js`. Para o Google funcionar, confirma no Firebase Console que:
 
-- Os métodos **E-mail/palavra-passe** e **Google** estão ativados em Authentication.
-- `k-naythan.github.io` está na lista de domínios autorizados de Authentication. Para desenvolvimento no Replit, autoriza também o domínio de pré-visualização usado.
+- Os fornecedores **E-mail/palavra-passe** e **Google** estão ativados em **Authentication → Sign-in method**. Para Google, configura também o e-mail de suporte do projeto.
+- `k-naythan.github.io` e o domínio exato usado na pré-visualização do Replit estão em **Authentication → Settings → Authorized domains**. O erro de domínio não autorizado mostra o hostname que falta.
+- Usa o domínio `retro-play-list.firebaseapp.com` configurado em `firebase-config.js`; se mudares o `authDomain`, revê também o domínio de redirecionamento OAuth do Google.
 - O painel administrativo é aberto pelo comando `/admin-painel` no chat da playlist. Só TRIV (`trivyy777@gmail.com`) e KYRA (`kyralovonny@gmail.com`) podem usá-lo; o painel valida a conta e a origem do comando. Mantém `ADMIN_EMAILS` em `firebase-config.js` sincronizado com `database.rules.json`.
-- Aplica as regras de `database.rules.json` no Realtime Database para proteger a lista e as alterações de utilizadores. Se já existirem regras para outros dados, combina-as em vez de substituir o conjunto inteiro sem revisão.
-- As regras fornecidas permitem operações autenticadas em `salas` para manter as salas e o chat existentes; os perfis de `usuarios` são limitados ao respetivo utilizador e às contas administrativas autorizadas.
+- Aplica as regras de `database.rules.json` no Realtime Database para limitar salas a contas verificadas e contas do site, e restringir perfis ao respetivo utilizador e administradores. Se já existirem regras para outros dados, combina-as em vez de substituir o conjunto inteiro sem revisão.
 
 A configuração Web, incluindo a chave `apiKey`, é enviada ao navegador e não é um segredo. Protege os dados com regras do Firebase e restrições da chave, não com valores secretos no código do cliente.
 
-O login e o registo são tratados no navegador; o formulário não deve enviar credenciais na URL. A sessão iniciada é restaurada automaticamente neste navegador; usa **Terminar sessão** para sair ou trocar de conta. Depois de aplicar as regras, testa o registo de uma conta nova e o login antes de publicar.
+O login e o registo são tratados no navegador; o formulário não deve enviar credenciais na URL. Contas por e-mail exigem palavra-passe e confirmação do endereço antes de abrir salas. Contas do site usam nome, username e palavra-passe, sem e-mail; o Firebase recebe um identificador interno terminado em `@accounts.pixel-retroplaylist.invalid`, que não é uma caixa de correio. Essas contas não têm recuperação por e-mail, portanto a palavra-passe deve ser guardada.
+
+A sessão iniciada é restaurada automaticamente neste navegador; usa **Terminar sessão** para sair ou trocar de conta. Se a conta por e-mail e a conta Google usarem o mesmo endereço, inicia sessão pelo método original e usa **Associar Google** para ligar as contas. Depois de aplicar as regras, testa o registo, a confirmação de e-mail, o login Google e a conta do site antes de publicar.
+
+Referências oficiais: [Google Sign-In para Web](https://firebase.google.com/docs/auth/web/google-signin), [verificação de e-mail](https://firebase.google.com/docs/auth/web/manage-users#send_a_user_a_verification_email) e [segurança do Realtime Database](https://firebase.google.com/docs/database/security).
 
 ## Áudio e temas
 

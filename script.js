@@ -19,6 +19,10 @@ import {
     getRedirectResult,
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword,
+    sendEmailVerification,
+    updateProfile,
+    linkWithPopup,
+    linkWithRedirect,
     deleteUser,
     signOut,
     onAuthStateChanged,
@@ -39,16 +43,23 @@ const formAutenticacao = document.getElementById('form-autenticacao');
 const authFeedback = document.getElementById('auth-feedback');
 const btnAbaLogin = document.getElementById('btn-aba-login');
 const btnAbaRegistro = document.getElementById('btn-aba-registro');
+const btnMetodoEmail = document.getElementById('btn-metodo-email');
+const btnMetodoSite = document.getElementById('btn-metodo-site');
+const containerNome = document.getElementById('container-nome');
 const containerUsuario = document.getElementById('container-usuario');
 const containerEmail = document.getElementById('container-email');
 
+const inputNome = document.getElementById('login-nome');
 const inputUsuario = document.getElementById('login-usuario');
 const inputEmail = document.getElementById('login-email');
 const inputSenha = document.getElementById('login-senha');
 const btnEntrarSistema = document.getElementById('btn-entrar-sistema');
 const btnGoogleLogin = document.getElementById('btn-google-login');
+const avisoContaSite = document.getElementById('site-account-notice');
 const accountControls = document.getElementById('account-controls');
 const accountEmail = document.getElementById('account-email');
+const btnVincularGoogle = document.getElementById('btn-vincular-google');
+const accountAuthFeedback = document.getElementById('account-auth-feedback');
 const btnTerminarSessao = document.getElementById('btn-terminar-sessao');
 const ADMIN_COMMAND_SESSION_KEY = 'pixel-retro-admin-command-uid';
 
@@ -75,6 +86,7 @@ const btnEnviarMensagem = document.getElementById('btn-enviar-mensagem');
 let salaAtual = null;
 let nomeUsuarioLogado = null; 
 let modoAtual = "login";
+let modoCredenciais = "email";
 const LIMITE_PESSOAS = 8;
 let cancelarHistoricoSalas = null;
 let cancelarChatAtual = null;
@@ -84,20 +96,25 @@ let adiarInicializacaoSessao = false;
 
 // Chave usada no localStorage para sincronizar sessão entre separadores
 const SESSION_KEY = 'pixel-retro-active-uid';
+const DOMINIO_EMAIL_INTERNO = "accounts.pixel-retroplaylist.invalid";
+
+function emailInternoDoUtilizador(usuario) {
+    return `${String(usuario || "").trim().toLowerCase()}@${DOMINIO_EMAIL_INTERNO}`;
+}
+
+function contaDoSite(utilizador) {
+    return Boolean(utilizador?.email?.toLowerCase().endsWith(`@${DOMINIO_EMAIL_INTERNO}`));
+}
 
 function utilizadorEAdministradora(utilizador = auth.currentUser) {
     const email = utilizador?.email?.trim().toLowerCase();
     return Boolean(email && ADMIN_EMAILS.some((emailAdmin) => emailAdmin.toLowerCase() === email));
 }
 
-// Garantir persistência local do Auth (compartilha sessão entre separadores)
-(async function initAuthPersistence() {
-    try {
-        await setPersistence(auth, browserLocalPersistence);
-    } catch (e) {
-        console.warn("Não foi possível definir a persistência local do Auth:", e);
-    }
-})();
+// Define persistência antes de qualquer início de sessão iniciado pelo utilizador.
+const authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((erro) => {
+    console.warn("Não foi possível definir a persistência local do Auth:", erro);
+});
 
 // Sincronização de sessão no localStorage
 function persistSessionForUser(user) {
@@ -152,8 +169,11 @@ onAuthStateChanged(auth, (utilizador) => {
     if (accountEmail) {
         accountEmail.textContent = utilizador?.displayName || utilizador?.email || "";
     }
+    const temGoogleLigado = Boolean(utilizador?.providerData?.some((provider) => provider.providerId === "google.com"));
+    btnVincularGoogle?.classList.toggle('escondido', !utilizador || temGoogleLigado);
 
     if (!utilizador) {
+        if (accountAuthFeedback) accountAuthFeedback.textContent = "";
         nomeUsuarioLogado = null;
         inicializacaoSessaoUid = null;
         inicializacaoSessaoPromise = null;
@@ -172,11 +192,24 @@ onAuthStateChanged(auth, (utilizador) => {
         return;
     }
 
+    if (!contaDoSite(utilizador) && !utilizador.emailVerified) {
+        accountControls?.classList.add('escondido');
+        telaTermos?.classList.add('escondido');
+        telaLogin?.classList.remove('escondido');
+        clearPersistedSession();
+        if (!adiarInicializacaoSessao) {
+            mostrarMensagemAutenticacao("Confirma o teu e-mail pelo link enviado antes de entrares. Inicia sessão novamente para pedir outro link.");
+            signOut(auth).catch((erro) => console.warn("Não foi possível terminar a sessão não verificada:", erro));
+        }
+        return;
+    }
+
+    if (adiarInicializacaoSessao) return;
+
     // Quando houver um utilizador válido, persistimos a sua sessão para que outros separadores
     // saibam que esta conta está ativa.
     persistSessionForUser(utilizador);
 
-    if (adiarInicializacaoSessao) return;
     void iniciarSessaoAutenticada(utilizador).catch((erro) => {
         console.error("Não foi possível restaurar a sessão:", erro);
         mostrarErroDeSessao(erro);
@@ -188,6 +221,9 @@ onAuthStateChanged(auth, (utilizador) => {
         const resultado = await getRedirectResult(auth);
         if (resultado && resultado.user) {
             await handleGoogleLoginResult(resultado);
+            if (resultado.operationType === "link" && accountAuthFeedback) {
+                accountAuthFeedback.textContent = "Conta Google associada.";
+            }
         }
     } catch (e) {
         console.warn("Erro ao processar o resultado de redirect do Google:", e);
@@ -208,6 +244,8 @@ document.addEventListener('pixel:open-room-history', ouvirHistoricoSalas);
 
 btnAbaLogin?.addEventListener('click', () => definirModoAutenticacao("login"));
 btnAbaRegistro?.addEventListener('click', () => definirModoAutenticacao("registro"));
+btnMetodoEmail?.addEventListener('click', () => definirMetodoCredenciais("email"));
+btnMetodoSite?.addEventListener('click', () => definirMetodoCredenciais("site"));
 
 function definirModoAutenticacao(modo) {
     modoAtual = modo;
@@ -216,34 +254,47 @@ function definirModoAutenticacao(modo) {
     if (btnAbaLogin && btnAbaRegistro) {
         btnAbaLogin.setAttribute('aria-pressed', String(!estaARegistar));
         btnAbaRegistro.setAttribute('aria-pressed', String(estaARegistar));
-        btnAbaLogin.style.background = estaARegistar ? "#c0c0c0" : "#e0e0e0";
-        btnAbaRegistro.style.background = estaARegistar ? "#e0e0e0" : "#c0c0c0";
-        btnAbaLogin.style.fontWeight = estaARegistar ? "normal" : "bold";
-        btnAbaRegistro.style.fontWeight = estaARegistar ? "bold" : "normal";
+    }
+
+    const contaSemEmail = modoCredenciais === "site";
+    const mostraUtilizador = estaARegistar || contaSemEmail;
+
+    if (containerNome && inputNome) {
+        containerNome.classList.toggle('escondido', !estaARegistar);
+        inputNome.required = estaARegistar;
+        inputNome.disabled = !estaARegistar;
     }
 
     if (containerUsuario && inputUsuario) {
-        containerUsuario.classList.toggle('escondido', !estaARegistar);
-        inputUsuario.required = estaARegistar;
-        inputUsuario.disabled = !estaARegistar;
+        containerUsuario.classList.toggle('escondido', !mostraUtilizador);
+        inputUsuario.required = mostraUtilizador;
+        inputUsuario.disabled = !mostraUtilizador;
     }
 
     if (containerEmail && inputEmail) {
-        containerEmail.classList.remove('escondido');
-        inputEmail.required = true;
-        inputEmail.disabled = false;
+        containerEmail.classList.toggle('escondido', contaSemEmail);
+        inputEmail.required = !contaSemEmail;
+        inputEmail.disabled = contaSemEmail;
     }
 
     if (inputSenha) {
         inputSenha.autocomplete = estaARegistar ? "new-password" : "current-password";
-        inputSenha.minLength = estaARegistar ? 6 : 0;
+        inputSenha.minLength = estaARegistar ? 8 : 0;
     }
 
     if (btnEntrarSistema) {
         btnEntrarSistema.textContent = estaARegistar ? "Criar conta" : "Iniciar sessão";
     }
 
+    avisoContaSite?.classList.toggle('escondido', !contaSemEmail);
     limparMensagemAutenticacao();
+}
+
+function definirMetodoCredenciais(metodo) {
+    modoCredenciais = metodo;
+    btnMetodoEmail?.setAttribute('aria-pressed', String(metodo === "email"));
+    btnMetodoSite?.setAttribute('aria-pressed', String(metodo === "site"));
+    definirModoAutenticacao(modoAtual);
 }
 
 // Inicializa no modo login por padrão
@@ -271,24 +322,28 @@ function limparMensagemAutenticacao() {
 function traduzirErroAutenticacao(erro) {
     const mensagens = {
         "auth/invalid-api-key": "Configuração de API inválida no Firebase.",
-        "auth/operation-not-allowed": "Método de autenticação não ativado no Firebase Console.",
+        "auth/operation-not-allowed": "Ativa este método em Firebase Console > Authentication > Sign-in method.",
         "auth/invalid-credential": "Dados incorretos. Verifica o e-mail e a palavra-passe.",
         "auth/invalid-login-credentials": "Dados incorretos. Verifica o e-mail e a palavra-passe.",
         "auth/invalid-email": "O e-mail introduzido é inválido.",
         "auth/email-already-in-use": "Este e-mail já está em uso por outro utilizador.",
-        "auth/weak-password": "A palavra-passe deve ter pelo menos 6 caracteres.",
+        "auth/weak-password": "A palavra-passe deve ter pelo menos 8 caracteres.",
         "auth/user-not-found": "Não existe conta associada a este e-mail.",
         "auth/wrong-password": "Palavra-passe incorreta.",
         "auth/user-disabled": "Esta conta foi desativada no Firebase.",
         "auth/too-many-requests": "Foram feitas demasiadas tentativas. Aguarda um pouco e tenta novamente.",
         "auth/network-request-failed": "Sem ligação à rede. Verifica a tua Internet.",
-        "auth/unauthorized-domain": "Domínio não autorizado no Firebase Console.",
+        "auth/unauthorized-domain": `O domínio ${window.location.hostname} não está autorizado. Adiciona-o em Firebase Console > Authentication > Settings > Authorized domains.`,
+        "auth/auth-domain-config-required": "A configuração do domínio de autenticação Firebase está incompleta.",
         "auth/popup-blocked": "O navegador bloqueou a janela do Google. Ativa os pop-ups.",
         "auth/popup-closed-by-user": "A janela do Google foi fechada antes da conclusão.",
         "auth/cancelled-popup-request": "Já existe um pedido Google aberto. Fecha-o e tenta novamente.",
         "auth/web-storage-unsupported": "O navegador bloqueou o armazenamento necessário para autenticar.",
         "auth/operation-not-supported-in-this-environment": "Este navegador não permite abrir a janela Google. Tenta novamente no navegador principal.",
-        "auth/account-exists-with-different-credential": "Este e-mail já está associado a outro método de entrada. Usa o método com que criaste a conta."
+        "auth/account-exists-with-different-credential": "Este e-mail já tem uma conta por outro método. Entra nesse método primeiro e usa «Associar Google» para ligar as contas.",
+        "auth/credential-already-in-use": "Esta conta Google já está associada a outro perfil.",
+        "auth/provider-already-linked": "Esta conta já tem um fornecedor Google associado.",
+        "auth/email-not-verified": "Confirma o teu e-mail antes de entrares na aplicação."
     };
     return mensagens[erro?.code] || (erro?.message ? erro.message : "Erro na autenticação. Tenta novamente.");
 }
@@ -300,7 +355,7 @@ function mostrarErroDeSessao(erro) {
         return;
     }
     if (erro?.code === "auth/unauthorized-domain") {
-        mostrarMensagemAutenticacao(`O domínio ${window.location.hostname} não está autorizado em Firebase Authentication > Authorized domains.`);
+        mostrarMensagemAutenticacao(traduzirErroAutenticacao(erro));
         return;
     }
     mostrarMensagemAutenticacao(traduzirErroAutenticacao(erro));
@@ -331,8 +386,9 @@ async function carregarOuCriarPerfil(utilizadorFirebase) {
     const nomeLimpo = nomeBase.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "user";
     const perfilNovo = {
         uid: utilizadorFirebase.uid,
-        email: utilizadorFirebase.email || "",
+        email: contaDoSite(utilizadorFirebase) ? "" : (utilizadorFirebase.email || ""),
         username: `${nomeLimpo}-${utilizadorFirebase.uid.slice(-8).toLowerCase()}`,
+        displayName: utilizadorFirebase.displayName || "",
         statusSistema: "nenhuma",
         motivoStatus: ""
     };
@@ -354,6 +410,12 @@ async function carregarOuCriarPerfil(utilizadorFirebase) {
 }
 
 function iniciarSessaoAutenticada(utilizadorFirebase) {
+    if (!contaDoSite(utilizadorFirebase) && !utilizadorFirebase.emailVerified) {
+        const erro = new Error("Confirma o teu e-mail antes de entrares na aplicação.");
+        erro.code = "auth/email-not-verified";
+        return Promise.reject(erro);
+    }
+
     if (inicializacaoSessaoUid === utilizadorFirebase.uid && inicializacaoSessaoPromise) {
         return inicializacaoSessaoPromise;
     }
@@ -394,22 +456,52 @@ function iniciarSessaoAutenticada(utilizadorFirebase) {
 
 formAutenticacao?.addEventListener('submit', async (evento) => {
     evento.preventDefault();
-    const email = inputEmail?.value.trim().toLowerCase();
+    const eContaSite = modoCredenciais === "site";
+    const emailIntroduzido = inputEmail?.value.trim().toLowerCase() || "";
+    const nome = inputNome?.value.trim() || "";
     const senha = inputSenha?.value ?? "";
     const usuario = inputUsuario ? inputUsuario.value.trim().toLowerCase() : "";
+    const email = eContaSite ? emailInternoDoUtilizador(usuario) : emailIntroduzido;
 
-    if (!email || !senha) {
-        mostrarMensagemAutenticacao("Preenche o e-mail e a palavra-passe.");
+    if (!senha) {
+        mostrarMensagemAutenticacao("Preenche a palavra-passe.");
         return;
     }
 
-    if (modoAtual === "registro" && !usuario) {
-        mostrarMensagemAutenticacao("Preenche o nome de utilizador para criares a conta.");
+    if (eContaSite && !usuario) {
+        mostrarMensagemAutenticacao("Preenche o nome de utilizador.");
         return;
     }
 
-    if (modoAtual === "registro" && !/^[a-z0-9_-]{3,32}$/.test(usuario)) {
-        mostrarMensagemAutenticacao("O nome de utilizador deve ter 3–32 caracteres: letras sem acentos, números, hífen ou sublinhado.");
+    if ((!eContaSite && !emailIntroduzido) || (!eContaSite && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailIntroduzido))) {
+        mostrarMensagemAutenticacao("Introduz um e-mail válido.");
+        return;
+    }
+
+    if (eContaSite || modoAtual === "registro") {
+        if (!/^[a-z0-9_-]{3,32}$/.test(usuario)) {
+            mostrarMensagemAutenticacao("O nome de utilizador deve ter 3–32 caracteres: letras sem acentos, números, hífen ou sublinhado.");
+            return;
+        }
+    }
+
+    if (modoAtual === "registro" && !nome) {
+        mostrarMensagemAutenticacao("Preenche o teu nome.");
+        return;
+    }
+
+    if (modoAtual === "registro" && nome.length > 64) {
+        mostrarMensagemAutenticacao("O nome pode ter no máximo 64 caracteres.");
+        return;
+    }
+
+    if (!eContaSite && emailIntroduzido.endsWith(`@${DOMINIO_EMAIL_INTERNO}`)) {
+        mostrarMensagemAutenticacao("Esse domínio é reservado para contas por nome de utilizador.");
+        return;
+    }
+
+    if (modoAtual === "registro" && senha.length < 8) {
+        mostrarMensagemAutenticacao("A palavra-passe deve ter pelo menos 8 caracteres.");
         return;
     }
 
@@ -419,26 +511,54 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
     limparMensagemAutenticacao();
 
     try {
+        await authPersistenceReady;
+
         if (modoAtual === "login") {
-            const credencial = await comTimeout(signInWithEmailAndPassword(auth, email, senha));
-            await iniciarSessaoAutenticada(credencial.user);
+            adiarInicializacaoSessao = true;
+            let utilizadorAutenticado = null;
+            try {
+                const credencial = await comTimeout(signInWithEmailAndPassword(auth, email, senha));
+                utilizadorAutenticado = credencial.user;
+                if (eContaSite !== contaDoSite(credencial.user)) {
+                    await signOut(auth);
+                    throw new Error(eContaSite
+                        ? "Não existe uma conta do site com esse nome de utilizador."
+                        : "Esta conta usa o método de acesso por nome de utilizador.");
+                }
+
+                if (!eContaSite && !credencial.user.emailVerified) {
+                    await sendEmailVerification(credencial.user);
+                    await signOut(auth);
+                    mostrarMensagemAutenticacao("O e-mail ainda não foi confirmado. Enviámos um novo link; confirma-o e inicia sessão novamente.", "sucesso");
+                    return;
+                }
+            } finally {
+                adiarInicializacaoSessao = false;
+            }
+
+            await iniciarSessaoAutenticada(utilizadorAutenticado);
 
         } else {
-            const userRef = ref(db, 'usuarios/' + usuario);
+            const userRef = ref(db, `usuarios/${usuario}`);
             let credencial;
+            let perfilCriado = false;
             adiarInicializacaoSessao = true;
 
             try {
                 credencial = await comTimeout(createUserWithEmailAndPassword(auth, email, senha));
+                await updateProfile(credencial.user, { displayName: nome });
+                const emailPerfil = eContaSite ? "" : emailIntroduzido;
+                const dadosPerfil = {
+                    uid: credencial.user.uid,
+                    email: emailPerfil,
+                    username: usuario,
+                    displayName: nome,
+                    statusSistema: "nenhuma",
+                    motivoStatus: ""
+                };
                 const resultado = await comTimeout(runTransaction(userRef, (perfilAtual) => {
                     if (perfilAtual !== null) return;
-                    return {
-                        uid: credencial.user.uid,
-                        email: email,
-                        username: usuario,
-                        statusSistema: "nenhuma",
-                        motivoStatus: ""
-                    };
+                    return dadosPerfil;
                 }, { applyLocally: false }));
 
                 if (!resultado.committed) {
@@ -446,9 +566,23 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
                     mostrarMensagemAutenticacao("Este nome de utilizador já está registado.");
                     return;
                 }
-                await iniciarSessaoAutenticada(credencial.user);
+                perfilCriado = true;
+
+                if (eContaSite) {
+                    adiarInicializacaoSessao = false;
+                    await iniciarSessaoAutenticada(credencial.user);
+                } else {
+                    await sendEmailVerification(credencial.user);
+                    await signOut(auth);
+                    mostrarMensagemAutenticacao("Conta criada. Enviámos um link de confirmação para o teu e-mail; confirma-o antes de iniciar sessão.", "sucesso");
+                }
             } catch (erroPerfil) {
-                if (credencial?.user) await deleteUser(credencial.user).catch(() => {});
+                if (credencial?.user && !perfilCriado) await deleteUser(credencial.user).catch(() => {});
+                else if (credencial?.user && !eContaSite) await signOut(auth).catch(() => {});
+                if (/PERMISSION_DENIED|database\/permission-denied/i.test(`${erroPerfil?.code || ""} ${erroPerfil?.message || ""}`)) {
+                    mostrarMensagemAutenticacao("Não foi possível reservar esse nome. Pode já estar em uso ou as regras atualizadas de database.rules.json ainda não foram aplicadas no Firebase.");
+                    return;
+                }
                 throw erroPerfil;
             } finally {
                 adiarInicializacaoSessao = false;
@@ -456,7 +590,11 @@ formAutenticacao?.addEventListener('submit', async (evento) => {
         }
     } catch (e) {
         console.error("Erro no formulário:", e);
-        mostrarErroDeSessao(e);
+        if (eContaSite && ["auth/user-not-found", "auth/invalid-credential", "auth/invalid-login-credentials", "auth/wrong-password"].includes(e?.code)) {
+            mostrarMensagemAutenticacao("Dados incorretos. Verifica o nome de utilizador e a palavra-passe.");
+        } else {
+            mostrarErroDeSessao(e);
+        }
     } finally {
         if (btnEntrarSistema) btnEntrarSistema.disabled = false;
         if (btnGoogleLogin) btnGoogleLogin.disabled = false;
@@ -475,6 +613,7 @@ btnGoogleLogin?.addEventListener('click', async () => {
     mostrarMensagemAutenticacao("A abrir autenticação Google…", "informacao");
 
     try {
+        await authPersistenceReady;
         if (auth.currentUser) {
             await iniciarSessaoAutenticada(auth.currentUser);
             return;
@@ -503,6 +642,40 @@ btnGoogleLogin?.addEventListener('click', async () => {
     } finally {
         if (btnGoogleLogin) btnGoogleLogin.disabled = false;
         if (btnEntrarSistema) btnEntrarSistema.disabled = false;
+    }
+});
+
+btnVincularGoogle?.addEventListener('click', async () => {
+    const utilizador = auth.currentUser;
+    if (!utilizador) return;
+
+    btnVincularGoogle.disabled = true;
+    if (accountAuthFeedback) accountAuthFeedback.textContent = "A associar Google…";
+
+    try {
+        await authPersistenceReady;
+        await linkWithPopup(utilizador, provedorGoogle);
+        if (accountAuthFeedback) accountAuthFeedback.textContent = "Conta Google associada.";
+    } catch (erro) {
+        const fallbackCodes = new Set([
+            "auth/popup-blocked",
+            "auth/web-storage-unsupported",
+            "auth/operation-not-supported-in-this-environment"
+        ]);
+        if (erro?.code && fallbackCodes.has(erro.code)) {
+            try {
+                await linkWithRedirect(utilizador, provedorGoogle);
+                return;
+            } catch (erroRedirect) {
+                console.error("Erro ao associar Google por redirecionamento:", erroRedirect);
+                if (accountAuthFeedback) accountAuthFeedback.textContent = traduzirErroAutenticacao(erroRedirect);
+            }
+        } else {
+            console.error("Erro ao associar conta Google:", erro);
+            if (accountAuthFeedback) accountAuthFeedback.textContent = traduzirErroAutenticacao(erro);
+        }
+    } finally {
+        btnVincularGoogle.disabled = false;
     }
 });
 

@@ -19,11 +19,19 @@
             </div>
             <div class="login-conteudo">
                 <p class="login-intro">Entra na tua conta ou cria uma nova para começares a ouvir música com outras pessoas.</p>
+                <div class="login-method-tabs" role="group" aria-label="Método de autenticação">
+                    <button id="btn-metodo-email" type="button" class="botao-retro" aria-pressed="true">Com e-mail</button>
+                    <button id="btn-metodo-site" type="button" class="botao-retro" aria-pressed="false">Conta do site</button>
+                </div>
                 <div style="display: flex; gap: 4px; margin-bottom: 12px;">
-                    <button id="btn-aba-login" type="button" class="botao-retro" aria-pressed="true" style="flex: 1; font-weight: bold; background: #e0e0e0;">Iniciar sessão</button>
-                    <button id="btn-aba-registro" type="button" class="botao-retro" aria-pressed="false" style="flex: 1;">Criar conta</button>
+                    <button id="btn-aba-login" type="button" class="botao-retro auth-tab" aria-pressed="true">Iniciar sessão</button>
+                    <button id="btn-aba-registro" type="button" class="botao-retro auth-tab" aria-pressed="false">Criar conta</button>
                 </div>
                 <form id="form-autenticacao" method="post">
+                    <div id="container-nome" class="campo-login escondido">
+                        <label for="login-nome">Nome</label>
+                        <input type="text" id="login-nome" name="displayName" placeholder="O teu nome" autocomplete="name" maxlength="64" style="width: 100%;" disabled>
+                    </div>
                     <div id="container-usuario" class="campo-login escondido">
                         <label for="login-usuario">Nome de utilizador</label>
                         <input type="text" id="login-usuario" name="username" placeholder="Ex.: daniel98" autocomplete="username" maxlength="32" style="width: 100%;">
@@ -39,6 +47,7 @@
                     <p id="auth-feedback" class="auth-feedback" role="status" aria-live="polite" hidden></p>
                     <button id="btn-entrar-sistema" type="submit" class="botao-retro login-submit">Iniciar sessão</button>
                 </form>
+                <p id="site-account-notice" class="site-account-notice escondido">Esta conta não usa e-mail. Se esqueceres a palavra-passe, não será possível recuperar o acesso; guarda-a num local seguro.</p>
                 <div class="login-google-separator"><span>ou</span></div>
                 <button id="btn-google-login" type="button" class="botao-retro login-google">
                     <span aria-hidden="true" class="google-mark">G</span> Continuar com Google
@@ -81,6 +90,8 @@
         </div>
         <div id="account-controls" class="account-controls escondido">
             <span id="account-email" class="account-email"></span>
+            <button id="btn-vincular-google" type="button" class="botao-retro">Associar Google</button>
+            <span id="account-auth-feedback" role="status" aria-live="polite"></span>
             <button id="btn-terminar-sessao" type="button" class="botao-retro">Terminar sessão</button>
         </div>
         <div id="menu-temas" class="theme-menu escondido" role="group" aria-label="Escolher tema">
